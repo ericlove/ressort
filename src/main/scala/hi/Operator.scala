@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** HiRes: Defines the Ressort Operator Functional Language
   *
   * HiRes is a high-level DSL for expressing sorts, joins, and other algorithms

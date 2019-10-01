@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.lo
 import ressort.util._
 import TypedLoAst.AstCheckRes

@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.compiler
 
 /** Insertion sort code generation parameters

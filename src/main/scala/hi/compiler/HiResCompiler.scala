@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** hi-compiler: Compiles declarative HiRes expressions into LoRes programs
   * for use by the backend.
   */

@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.lo.interp
 import scala.collection.immutable.ListMap
 import scala.collection.mutable.HashMap

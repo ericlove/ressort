@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** Code generator for insertion sort.  
   */
 package ressort.hi.compiler

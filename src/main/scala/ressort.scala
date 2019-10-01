@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort
 import hi._
 import ressort.compiler._

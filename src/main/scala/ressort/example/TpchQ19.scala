@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.example
 import ressort.util.log2Up
 import ressort.Ressort

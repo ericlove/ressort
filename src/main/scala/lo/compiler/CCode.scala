@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.compiler
 import ressort.lo.LoAst
 import java.io.PrintWriter

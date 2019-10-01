@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.lo
 import scala.collection.mutable.ArrayBuffer
 import ressort.util._

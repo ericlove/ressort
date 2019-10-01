@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** ArrayStructs: an LoRes transformation to convert all Arr(..) types into
   * structs that explicitly contain a length field.
   */

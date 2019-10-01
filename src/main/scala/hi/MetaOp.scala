@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.hi.meta
 import ressort.hi._
 import ressort.lo

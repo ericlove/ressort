@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.lo.compiler
 import org.scalatest.FunSpec
 import org.scalatest.GivenWhenThen

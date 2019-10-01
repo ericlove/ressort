@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.hi
 import ressort.lo
 import ressort.lo.{LoType}

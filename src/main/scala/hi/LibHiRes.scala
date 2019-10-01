@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** LibHiRes: A set of library routines for building complex HiRes operators */
 package ressort.hi
 import ressort.lo

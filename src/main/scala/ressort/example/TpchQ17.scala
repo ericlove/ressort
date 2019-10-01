@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.example
 import scala.collection.mutable.{HashMap, LinkedHashMap, ArrayBuffer}
 import ressort.hi._

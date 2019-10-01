@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /* C++ AST extensions for dealing with OpenMP constructs */
 
 package ressort.compiler.cpp

@@ -1,3 +1,4 @@
+// See LICENSE.txt
 /** HiRes Programs: Syntactic sugar for constructing HiRes programs */
 package ressort.hi
 import ressort.hi.meta.{MetaOp, MetaParam, ConcreteParam}

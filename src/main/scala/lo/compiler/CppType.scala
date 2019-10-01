@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.compiler.cpp
 import ressort.lo.compiler.LoResCompiler
 import ressort.lo

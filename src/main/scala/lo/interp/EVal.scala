@@ -1,3 +1,4 @@
+// See LICENSE.txt
 package ressort.lo.interp
 import scala.collection.mutable.HashSet
 import ressort.lo._
