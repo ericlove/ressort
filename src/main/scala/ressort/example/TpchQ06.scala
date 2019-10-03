@@ -74,7 +74,7 @@ object TpchQ06 {
       meta = meta.splitPar(Const(threads))
 
     meta = meta
-      .filter(predicates:_*)
+      .filter(predicates:_*).withCracked(crack)
       .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
       .aggregate(('revenue, PlusOp))
 

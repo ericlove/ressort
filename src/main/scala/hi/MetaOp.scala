@@ -620,7 +620,8 @@ case class Filter(
     in: MetaOp,
     conds: Seq[Expr],
     name: Option[ProgSym]=None,
-    id: MetaOpId=new MetaOpId())
+    id: MetaOpId=new MetaOpId(),
+    config: Filter.Config=Filter.Config())
   extends MetaOp {
 
   def inputs: Seq[MetaOp] = Seq(in)
@@ -635,14 +636,39 @@ case class Filter(
     val in = p.fresh("in")
     val fil = p.fresh("fil")
     in := this.in
-    fil := Mask(in, in(conds.reduceLeft(And(_,_))))
+    if (config.cracked) {
+      fil := in
+      for (c <- conds) {
+        fil := Mask(fil, fil(c))
+      }
+    } else {
+      fil := Mask(in, in(conds.reduceLeft(And(_,_))))
+    }
     copy(name = Some(fil), in = in.metaOp.get)
   }
 
   override def complete(implicit p: Program) = Compact(concrete(p).name.get)
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
-    Seq(copy(in = generator(in)))
+    val in = generator(this.in)
+    config.splat.map(c => copy(in = in, config = c))
+  }
+
+  def withCracked(cracked: MetaParam[Boolean]): Filter = copy(config = config.copy(cracked=cracked))
+}
+
+object Filter {
+  case class Config(
+      val cracked: MetaParam[Boolean]=false,
+      val collect: MetaParam[Boolean]=false) {
+    def splat: Seq[Config] = {
+      for {
+        cracked <- this.cracked.splat
+        collect <- this.collect.splat
+      } yield {
+        copy(cracked = cracked, collect = collect)
+      }
+    }
   }
 }
 
