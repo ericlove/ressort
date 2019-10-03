@@ -43,7 +43,7 @@ object CppType {
     case lo.LoFloat(c) => Float(c)
     case lo.LoDouble(c) => Double(c)
 
-    case a @ lo.Arr(t1, c) => Vector(this(t1), c)
+    case a @ lo.Arr(t1, c) => Array(this(t1), c)
     case lo.Ptr(loType, c) => Ptr(this(loType), c)
     case lo.Bool(c) => Bool(c)
     case lo.Struct(name, fields, const) => {
@@ -109,7 +109,7 @@ case object Void extends CppType("void") { val const = false }
 case class Arr(t: CppType, const: Boolean=false) extends CppType(t.toString) {
   override def subsc(lval: Expr, n: Expr) = Subsc(lval, n)
 }
-case class Vector(t: CppType, const: Boolean=false) extends CppType(s"res_vec<$t>") {
+case class Array(t: CppType, const: Boolean=false) extends CppType(s"std::array<$t>") {
   override def subsc(lval: Expr, n: Expr) = Subsc(lval, n)
   override def getNumEntries(e: Expr): Expr = {
     Call(Dot(e, "size"), Nil)

@@ -174,7 +174,7 @@ class LoResCompiler(
 
 
 object LoResCompiler {
-  val defaultGlobalHeaders = Seq("stdint.h", "string.h", "vector", "math.h", "tpch.h")
+  val defaultGlobalHeaders = Seq("stdint.h", "string.h", "array", "math.h", "tpch.h")
   val defaultLocalHeaders = Seq[String]()
   val defaultLoAstToCppAst = new LoAstToCppAst()
   def printAst(typed: lo.TypedLoAst): lo.TypedLoAst = {
