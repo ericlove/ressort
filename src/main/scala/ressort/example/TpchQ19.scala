@@ -73,13 +73,7 @@ trait Q19Auto { this: TpchQ19 =>
   def meta: MetaOp
 
   def hiRes: Operator = {
-    val prog = new Program()
-    val ops = meta.all.map(_.pruneFields.complete(prog))
-    ops.map(println)
-    println("---")
-    ops.map(o => prog(o('price))).map(_.listing(1, 120).string).map(println)
-    val op = ops.head
-    prog(op)
+    meta.allOps.head
   }
 }
 

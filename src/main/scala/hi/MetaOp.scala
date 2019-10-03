@@ -103,6 +103,15 @@ sealed trait MetaOp {
     gen.all
   }
 
+  def allOps: Seq[Operator] = {
+    val metaOps = this.all.map(_.pruneFields)
+    for (o <- metaOps) yield {
+      val p = new Program()
+      p(o.complete(p))
+    }
+  }
+
+
   /** Returns a new version of this operator where [[Rename]]s have been "pruned"
     * to output only those fields that are actually used
     */

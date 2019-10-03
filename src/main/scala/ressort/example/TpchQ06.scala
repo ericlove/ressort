@@ -68,24 +68,23 @@ object TpchQ06 {
         'l_discount > constants.minDiscount && 'l_discount < constants.maxDiscount,
         'l_quantity < constants.maxQuantity)
 
-    var op: MetaOp = litem
+    var meta: MetaOp = litem
 
     if (threads > 1)
-      op = op.splitPar(Const(threads))
+      meta = meta.splitPar(Const(threads))
 
-    op = op
+    meta = meta
       .filter(predicates:_*)
       .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
       .aggregate(('revenue, PlusOp))
 
     if (threads > 1)
-      op = op.connector(o => NestedSumDouble(o('revenue)))
+      meta = meta.connector(o => NestedSumDouble(o('revenue)))
 
-    op = op.connector(o => o(Cast(UField(0), lo.LoFloat())))
+    meta = meta.connector(o => o(Cast(UField(0), lo.LoFloat())))
 
-    val prog = new Program()
-    val ops = op.all.map(_.pruneFields.complete(prog))
-    prog(ops.head)
+    meta.allOps.head
+
   }
 
 }
