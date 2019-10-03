@@ -49,6 +49,9 @@ object TpchQ06 {
     val maxQuantity = 24
   }
 
+  import ressort.hi.meta._
+  import ressort.hi.meta.MetaParam._
+
   val funcType = {
     Func(
       Map(
@@ -57,33 +60,32 @@ object TpchQ06 {
   }
 
   def query(threads: Int=1, crack: Boolean=false, pad: Int=4096, minDate: Int=constants.minDate): Operator = {
+    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+
     val predicates =
       List(
         'l_shipdate > minDate && 'l_shipdate < constants.maxDate,
         'l_discount > constants.minDiscount && 'l_discount < constants.maxDiscount,
         'l_quantity < constants.maxQuantity)
 
-    Let(List(
-      ('L := { if (threads > 1) SplitPar('lineitem, threads, padding=pad) else 'lineitem }),
-      ('P := {
-        if (crack) {
-          val names = predicates.zipWithIndex.map(p => Symbol(s"p_${p._2}"))
-          var assigns = List[Assign]()
-          var name = 'L
-          for ((p, n) <- predicates.zip(names)) {
-            assigns :+= (n := Mask(name, name(p)))
-            name = n
-          }
-          Let(assigns, name)
-        } else {
-          val expr = predicates.foldLeft[Expr](True) { case (l, p) => l && p }
-          Mask('L, 'L(expr))
-        }
-      }),
-      ('revenue :=
-        SumDouble(
-          'P(
-            Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))))),
-      if (threads > 1) NestedSumDouble('revenue).cast(lo.LoFloat()) else 'revenue.cast(lo.LoFloat()))
+    var op: MetaOp = litem
+
+    if (threads > 1)
+      op = op.splitPar(Const(threads))
+
+    op = op
+      .filter(predicates:_*)
+      .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
+      .aggregate(('revenue, PlusOp))
+
+    if (threads > 1)
+      op = op.connector(o => NestedSumDouble(o('revenue)))
+
+    op = op.connector(o => o(Cast(UField(0), lo.LoFloat())))
+
+    val prog = new Program()
+    val ops = op.all.map(_.pruneFields.complete(prog))
+    prog(ops.head)
   }
+
 }
