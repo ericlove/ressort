@@ -638,11 +638,25 @@ case class Filter(
     in := this.in
     if (config.cracked) {
       fil := in
+      if (config.collect)
+        fil := Position(fil, relative=true)
       for (c <- conds) {
-        fil := Mask(fil, fil(c))
+        if (config.collect) {
+          fil := Mask(fil, Gather(fil, in)(c))
+          fil := Collect(fil)
+        } else {
+          fil := Mask(fil, fil(c))
+        }
       }
+      if (config.collect)
+        fil := Gather(fil, in)
     } else {
-      fil := Mask(in, in(conds.reduceLeft(And(_,_))))
+      if (config.collect) {
+        fil := Mask(in, in(conds.reduceLeft(And(_,_))))
+        fil := Collect(fil)
+      } else {
+        fil := Mask(in, in(conds.reduceLeft(And(_,_))))
+      }
     }
     copy(name = Some(fil), in = in.metaOp.get)
   }
@@ -655,12 +669,14 @@ case class Filter(
   }
 
   def withCracked(cracked: MetaParam[Boolean]): Filter = copy(config = config.copy(cracked=cracked))
+  def withCollect(collect: MetaParam[Boolean]): Filter = copy(config = config.copy(collect=collect))
 }
 
 object Filter {
   case class Config(
       val cracked: MetaParam[Boolean]=false,
-      val collect: MetaParam[Boolean]=false) {
+      val collect: MetaParam[Boolean]=false,
+      val gather: MetaParam[Boolean]=false) {
     def splat: Seq[Config] = {
       for {
         cracked <- this.cracked.splat
