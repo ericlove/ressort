@@ -697,7 +697,7 @@ case class Compact(
   
 }
 
-case class Position(o: Operator) extends Operator("Position", o::Nil)
+case class Position(o: Operator, relative: Boolean=false) extends Operator("Position", o::Nil)
 
 case class Mask(
     o: Operator,

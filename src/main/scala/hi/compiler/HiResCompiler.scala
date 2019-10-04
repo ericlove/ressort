@@ -330,7 +330,7 @@ object HiResCompiler {
       case hi.Compact(o, _, _)              => transOpNameStr(o)
       case hi.Reduce(o, op, init)           => "Reduce_"+transOpNameStr(o)
       case hi.NestedReduce(o, op, init)     => "NestedReduce_"+transOpNameStr(o)
-      case hi.Position(o)                   => "Pos_"+transOpNameStr(o)
+      case hi.Position(o, _)                => "Pos_"+transOpNameStr(o)
       case hi.Let(_, o)                     => transOpNameStr(o)
       case z: hi.Zip                        => {
         val subStrs = z.ops map transOpNameStr

@@ -178,7 +178,7 @@ class LoopBodyGenerator(elaboration: Elaboration, node: LoDag) {
       val code = {
         mask(
           inputs.head,
-          output.access(cursor) := output.offset + cursor)
+          output.access(cursor) := (if (o.relative) cursor else output.offset + cursor))
       }
       LoopLevel(code)
     }

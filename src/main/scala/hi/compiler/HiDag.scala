@@ -450,8 +450,10 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
         HiArrayOp(
           materialInputs        = List(false),
           arrayInputs           = List(false),
-          streamingOutput       = true,
+          streamingOutput       = false,
+          dataParallelOutput    = false,
           controlsOutputCursor  = true,
+          blockingOutput        = true,
           typed                 = typedOp.copy(o = newOp))
       }
 
@@ -476,7 +478,7 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
       }
 
       case o: hi.Position => {
-        val newOp = hi.Position(hi.DagOp(inputs.head.nodeId))
+        val newOp = o.copy(hi.DagOp(inputs.head.nodeId))
         HiArrayOp(
           materialInputs      = inputs.map(_ => false),
           arrayInputs         = inputs.map(_ => false),
