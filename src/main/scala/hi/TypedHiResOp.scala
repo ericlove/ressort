@@ -417,7 +417,7 @@ private class OperatorTypeCheck(o: Operator, externalEnv: Map[Id, HiType]) {
               case v: Vec => {origVec = true; v}
               case s: Scalar => Vec(s)
             }
-            val out = getNested(input).withSubArr(newSubArr).flatten
+            val out = getNested(input).withSubArr(newSubArr).withNumValid(false).asInstanceOf[NestedData].flatten
             if (origVec)
               out
             else

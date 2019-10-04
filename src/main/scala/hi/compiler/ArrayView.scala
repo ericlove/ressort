@@ -338,7 +338,7 @@ abstract class StatefulNestedView(state: NestedViewState) extends NestedView wit
 
   def logVecLen = state.logVecLen
 
-  def maxCursor = numValid.map(_.access(state.index)).getOrElse(logVecLen)
+  def maxCursor = numValid.map(_.access(0)).getOrElse(logVecLen)
 
   def offset = state.offset
 

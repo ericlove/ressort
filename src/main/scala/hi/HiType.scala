@@ -104,8 +104,9 @@ sealed trait Data extends HiType {
   /** Returns true iff this datatype contains a [[Masked]] */
   def masked: Boolean = subVec.masked
 
-  /** Returns a copy of this type with `numValid` set to as indicated */
-  def withNumValid(numValid: Boolean): Data = this
+  /** Returns a copy of this type with `numValid` set 
+    * as indicated __on the innermost array __*/
+  def withNumValid(numValid: Boolean): Data
 
   /** Returns true if this type contains a [[Hist]] */
   def hasHistogram: Boolean = this match {
@@ -279,6 +280,8 @@ sealed trait FlatData extends Data {
   def withoutChunks: FlatData = this
 
   def withCleanArrays: FlatData = this
+
+  def withNumValid(numValid: Boolean): FlatData = this
 }
 
 /** A [[Container]] that is nested: not just a vector or scalar */
@@ -290,6 +293,8 @@ sealed trait NestedData extends Container {
   def withSubVec(s: Scalar): NestedData
 
   def withSubMask(t: Primitive): NestedData
+
+  def withNumValid(numValid: Boolean): NestedData
 
   override def withSubArr(t: Data): NestedData
 
@@ -376,7 +381,10 @@ case class Arr(
 
   override def withMask(masked: Boolean): Arr = this.copy(t = t.withMask(masked))
 
-  override def withNumValid(numValid: Boolean): Arr = this.copy(numValid = numValid)
+  override def withNumValid(numValid: Boolean): Arr = base match {
+    case n: NestedData => this.withBase(n.withNumValid(numValid))
+    case _ => this.copy(numValid = numValid)
+  }
 
   def withoutChunks = copy(t.withoutChunks)
 
@@ -410,6 +418,8 @@ case class Chunks(t: Data, disjoint: Boolean=false) extends NestedData {
   def withoutChunks = Arr(t)
 
   def withCleanArrays = Arr(t.withCleanArrays)
+
+  override def withNumValid(numValid: Boolean): Chunks = this
 
   def accepts(other: HiType): Boolean = other match {
     case c: Chunks => t.accepts(c.t)
@@ -459,6 +469,7 @@ case class MultiHiType(head: Data, tail: Data*) extends Data {
   def withCleanArrays = ???
 
   def withSubMask(t: Primitive): Data = ???
+  def withNumValid(numValid: Boolean) = ???
 
   override def hasChunks = ???
   override def withMask(masked: Boolean) = ???

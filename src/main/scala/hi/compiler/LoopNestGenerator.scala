@@ -115,7 +115,7 @@ class LoopNestGenerator(node: LoDag, elaboration: Elaboration) {
         newInner = newInner.copy(higherInit = newInner.higherInit + initOutputCursor)
       else
         newInner = newInner.copy(initializer = newInner.initializer + initOutputCursor)
-      newInner += setNumValid
+      newInner = newInner.copy(finalizer = newInner.finalizer + setNumValid)
     } else {
       val numValidInput = {
         // If no cursor update, copy the num valid from this node's controlling input
