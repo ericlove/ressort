@@ -108,7 +108,9 @@ case class TpchQ19AutoNopa(
 
   val meta = {
     var table: MetaOp = part
+    if (threads > 1) table = table.splitPar(threads)
     if (earlyMat) table = table.rename()
+    if (threads > 1) table = table.flatten
 
     var join: MetaOp = litem
       .withParams(totalBits)
