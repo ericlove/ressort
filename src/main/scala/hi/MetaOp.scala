@@ -89,8 +89,22 @@ sealed trait MetaOp {
   def partition(key: Id): HashPartition = HashPartition(this, key)
   def flatten: MetaOp = Connector(this, Flatten(_))
   def shell: MetaOp = Connector(this, Shell(_))
-  def splitPar(slices: Expr) = Connector(this, SplitPar(_, slices))
-  def splitSeq(slices: Expr) = Connector(this, SplitSeq(_, slices))
+  def splitPar(slices: Expr) = slices match {
+    case Const(n) if n < 2 => this
+    case _ => Connector(this, SplitPar(_, slices))
+  }
+  def splitSeq(slices: Expr) = slices match {
+    case Const(n) if n < 2 => this
+    case _ => Connector(this, SplitSeq(_, slices))
+  }
+  def nestedSumDouble(expr: Expr, mute: Boolean=false) = {
+    if (mute)
+      this
+    else
+      this.connector(o => NestedSumDouble(o(expr)))
+  }
+  def cast(expr: Expr, t: Payload) = this.connector(o => o(Cast(expr, t)))
+
   def connector(f: Operator=>Operator): Connector = Connector(this, f)
   def compact: CompactMeta = CompactMeta(this)
 

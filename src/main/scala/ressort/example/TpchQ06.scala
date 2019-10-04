@@ -70,18 +70,13 @@ object TpchQ06 {
 
     var meta: MetaOp = litem
 
-    if (threads > 1)
-      meta = meta.splitPar(Const(threads))
-
     meta = meta
+      .splitPar(Const(threads))
       .filter(predicates:_*).withCracked(crack).withCollect(collect)
       .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
       .aggregate(('revenue, PlusOp))
-
-    if (threads > 1)
-      meta = meta.connector(o => NestedSumDouble(o('revenue)))
- 
-    meta = meta.connector(o => o(Cast(UField(0), lo.LoFloat())))
+      .nestedSumDouble('revenue, mute = threads < 2)
+      .cast(UField(0), lo.LoFloat())
 
     meta.allOps.head
 
