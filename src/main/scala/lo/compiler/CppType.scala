@@ -109,7 +109,7 @@ case object Void extends CppType("void") { val const = false }
 case class Arr(t: CppType, const: Boolean=false) extends CppType(t.toString) {
   override def subsc(lval: Expr, n: Expr) = Subsc(lval, n)
 }
-case class Array(t: CppType, const: Boolean=false) extends CppType(s"std::array<$t>") {
+case class Array(t: CppType, const: Boolean=false) extends CppType(s"res_vec<$t>") {
   override def subsc(lval: Expr, n: Expr) = Subsc(lval, n)
   override def getNumEntries(e: Expr): Expr = {
     Call(Dot(e, "size"), Nil)
