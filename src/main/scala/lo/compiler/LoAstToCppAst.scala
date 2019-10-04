@@ -153,7 +153,7 @@ class LoAstToCppAst(
               List(DerefDot(cppLValue, "pointer"), Const(0), Mul(Sizeof(cppType), cppExpr))))
         }
         val alloc = {
-          Assign(cppLValue, Alloc(Vector(cppType), List(cppExpr)))
+          Assign(cppLValue, Alloc(Array(cppType), List(cppExpr)))
         }
 
         if (initBuffers) Block(List(alloc,memset)) else alloc

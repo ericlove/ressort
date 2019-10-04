@@ -17,7 +17,7 @@ trait SetterMethodInsertion extends LoAstToCppAst {
     val setters = for ((id, loType) <- td.fields) yield {
       loType match {
         case lo.Ptr(lo.Arr(t2, _), _) => {
-          Some(makeSetter(id, cpp.Vector(cpp.CppType(t2))))
+          Some(makeSetter(id, cpp.Array(cpp.CppType(t2))))
         }
         case _ => None
       }
