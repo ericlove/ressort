@@ -128,7 +128,7 @@ class AllCornerTests extends CompilerTest(CompilerTest.cornerTests)
 class AllQueryTests extends CompilerTest(CompilerTest.queryTests)
 
 class TpchQ01Test extends CompilerTest(new TpchQ01(CompilerTest.tpch) :: Nil) 
-class TpchQ06Test extends CompilerTest(new TpchQ06(threads=16, crack=false, tpch=Some(CompilerTest.tpch)) :: Nil)
+class TpchQ06Test extends CompilerTest(new TpchQ06(threads=16, crack=true, tpch=Some(CompilerTest.tpch)) :: Nil)
 class TpchQ06CrackTest extends CompilerTest(new TpchQ06(threads=1, crack=true, tpch=Some(CompilerTest.tpch)) :: Nil)
 
 class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.smallTpch) :: Nil)
@@ -207,7 +207,7 @@ abstract class CompilerTest(tests: Seq[HiResTest]) extends fixture.FunSpec with 
         val fc = new HiResCompiler()
         val lc = new LoResCompiler()
         val input = test.input
-        Given("HiResCode:\n" + test.hiRes.listing(3, OperatorListing.lineLength).string)
+        Given("HiResCode:\n" + test.hiRes.listing(0, OperatorListing.lineLength).string)
         val clr = fc.compile(test.hiRes, test.funcType, fixture.verbose, Some(test.name))
         val HiResCompiler.CompiledLoRes(hi, hiType, loFunc, defs) = clr
         //println(loFunc.tabStr(2))
