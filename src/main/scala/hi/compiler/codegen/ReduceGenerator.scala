@@ -18,7 +18,8 @@ case class ReduceGenerator(
       nested: Boolean,
       op: hi.Reduce): LoopLevel = {
     // NOTE: CodeGeneratorFacade initializes accumulator
-    val acc = if (nested) output.currentRec else output.firstRec 
+    val accVar = elaboration.tempIds.newId("acc")
+    val acc = if (nested) output.currentRec else accVar
     val next = input.currentRec
     val initVar = elaboration.tempIds.newId("init")
     val expr = op.op match {
@@ -31,11 +32,13 @@ case class ReduceGenerator(
     }
     val setMask = (output.currentMask.map(_ := True)).getOrElse(Nop)
     val initMask = (output.currentMask.map(_ := False)).getOrElse(Nop)
+    val finalizer = if (nested) Nop else (output.currentRec := accVar)
     op.init match {
       case Some(i) => {
         LoopLevel(
           body = (acc := expr) + setMask,
-          initializer = (if (nested) Nop else (acc := Expr(i))) + initMask)
+          initializer = (if (nested) Nop else (accVar := (output.recType, Expr(i)))) + initMask,
+          finalizer = finalizer)
       }
       case None => {
         LoopLevel(
@@ -44,7 +47,8 @@ case class ReduceGenerator(
               initVar,
               (acc := expr) + setMask,
               (initVar := True) + (acc := next)),
-          initializer = (initVar := (Bool(), False)) + initMask)
+          initializer = (initVar := (Bool(), False)) + initMask + Dec(accVar, output.recType),
+          finalizer = finalizer)
       }
     }
   }
