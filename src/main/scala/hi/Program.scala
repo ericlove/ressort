@@ -42,6 +42,12 @@ class Program {
     var metaOp: Option[MetaOp] = None
 
     def :=(o: Operator): Unit = {
+      o match {
+        case i: IdOp =>
+          assigns += Assign(i.id, IdOp(i.id))
+          println(assigns)
+        case _ =>
+      }
       assigns += Assign(id, o)
       metaOp = None
     }

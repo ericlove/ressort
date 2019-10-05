@@ -55,8 +55,8 @@ trait Q19Auto { this: TpchQ19 =>
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
 
-  val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
-  val part = Concrete('part, TpchSchema.part.s.fields.map(_.name.get.name).map(Id).toSet)
+  val litem = Concrete('lineitem_, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+  val part = Concrete('part_, TpchSchema.part.s.fields.map(_.name.get.name).map(Id).toSet)
 
   val postCond = 
   ('p_brand === BRAND12.n
@@ -73,7 +73,11 @@ trait Q19Auto { this: TpchQ19 =>
   def meta: MetaOp
 
   def hiRes: Operator = {
-    meta.allOps.head
+    Let(
+      List(
+        'part_ := 'part,
+        'lineitem_ := 'lineitem),
+    in = meta.allOps.head)
   }
 }
 
@@ -139,6 +143,119 @@ case class TpchQ19AutoNopa(
       .connector(o => NestedSumFloat(o('price)))
   }
 
+}
+
+class TpchQ19AutoPartAll(
+    val tpch: Option[TpchSchema.Generator],
+    val partSize: Expr = Const(1 << 12),
+    val partBits: Expr = Const(6),
+    val threads: Int=16,
+    val preThreads: Int=0,
+    val postThreads: Int=0,
+    val extraHashBits: Option[Int]=None,
+    val slots: Int=1,
+    val compact: Boolean=true,
+    val earlyMatPart: Boolean=true,
+    val earlyMat: Boolean=true,
+    val buildPartitioned: Boolean=false,
+    val blockBuild: Boolean=true,
+    val twoSided: Boolean=true,
+    val threadLocal: Boolean=true,
+    val inline: Boolean=true)
+  extends TpchQ19(tpch) with Q19Auto {
+
+
+  val name = {
+    val threadsStr = s"_${threads}t"
+    val useHashStr = extraHashBits.map(_.toString.replace("-", "m")).map(n => s"_hash${n}eb").getOrElse("")
+    val slotsStr = s"_${slots}s"
+    val compactStr = if (compact) "_cpct" else ""
+    val earlyMatPartStr = if (earlyMatPart) "_pem" else ""
+    val earlyMatStr = if (earlyMat) "_em" else ""
+    val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
+    val inlineStr = if (inline) "_inline" else ""
+    val nbitsStr = partBits match {
+      case Const(n) => s"_nbits$n"
+      case _ =>
+    }
+    val twoSideStr = if (twoSided) "_twos" else ""
+    val threadLocalStr = if (threadLocal) "_tlocal" else ""
+    val preThreadsStr = s"_${preThreads}prth"
+    val postThreadsStr = s"_${postThreads}psth"
+    s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
+      s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr" +
+      s"$threadLocalStr$preThreadsStr$postThreadsStr"
+  }
+
+  import ressort.hi.meta._
+  import ressort.hi.meta.MetaParam._
+  val totalBits = new ParamList[Expr](List(Log2Up(partSize)))
+  val joinBits = new ExprParam(totalBits, e => e - partBits)
+  val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
+  val partMsb = new ExprParam(totalBits, e => e - Const(1))
+  val partHash = HashConfig(bits = partBits, msb = partMsb)
+  val joinHash = HashConfig(bits = joinBits, msb = joinMsb)
+
+  val meta = {
+    var table: MetaOp = part
+
+    val probeDepth = {
+      var d = 0
+      if (threads > 1) d += 1
+      if (threadLocal && threads > 1) d += 1
+      if (postThreads > 1) d += 1
+      if (preThreads > 1) d += 1
+      d
+    }
+
+    for (i <- 1 to probeDepth-1)
+      table = table.shell
+
+    table = table.splitPar(threads)
+    table = table.rename()
+    table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
+
+    var join: MetaOp = litem.withParams(totalBits)
+
+    join = join
+      .splitSeq(preThreads)
+      .splitPar(threads)
+      .splitSeq(postThreads)
+      .filter(
+        ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
+        ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+      .rename()
+      .partition('l_partkey)
+        .withHash(partHash)
+        .withParallel(threads > 1 && !threadLocal)
+        .withGather(!earlyMat)
+
+    join = join.shell
+
+    join = join
+      .equiJoin(table, 'l_partkey,'p_partkey)
+        .withHash(joinHash)
+        .withCompactTable(compact)
+        .withInlineCounter(inline)
+        .withSlots(Const(slots))
+        .withHash(joinHash)
+        .withGather(false)
+        .withBlockBuild(blockBuild)
+        .withBlockHash(false)
+        .withPartition(partition=buildPartitioned, threads=threads)
+
+    join = join
+        .filter(postCond)
+        .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
+        .aggregate(('price, PlusOp))
+        .nestedSumDouble('price)
+
+    for (i <- 1 to probeDepth)
+      join = join.nestedSumDouble(UField(0))
+
+    join
+      .cast(UField(0), lo.LoFloat())
+  }
 }
 
 object TpchQ19 {

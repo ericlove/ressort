@@ -380,12 +380,13 @@ case class HashPartition(
   def withBlock(block: MetaParam[Boolean]): HashPartition = copy(config = config.copy(block = block))
   def withRename: HashPartition = copy(renamed = Some(in.rename()))
   def withParallel(parallel: MetaParam[Boolean]): HashPartition = copy(config = config.copy(parallel = parallel))
+  def withGather(gather: MetaParam[Boolean]): HashPartition = copy(config = config.copy(gather = gather))
 }
 
 object HashPartition {
   case class Config(
       hash: HashConfig = HashConfig(),
-      gather: MetaParam[Boolean] = true,
+      gather: MetaParam[Boolean] = false,
       block: MetaParam[Boolean] = false,
       parallel: MetaParam[Boolean] = false) {
     def splat: Seq[Config] = {
