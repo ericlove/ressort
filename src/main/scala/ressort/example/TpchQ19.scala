@@ -153,6 +153,7 @@ class TpchQ19AutoPartAll(
     buildPartitioned: Boolean=true,
     blockBuild: Boolean=true,
     twoSided: Boolean=true,
+    threadLocal: Boolean=true,
     inline: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
 
@@ -171,8 +172,10 @@ class TpchQ19AutoPartAll(
       case _ =>
     }
     val twoSideStr = if (twoSided) "_twos" else ""
+    val threadLocalStr = if (threadLocal) "_tlocal" else ""
     s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
-      s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr"
+      s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr" +
+      s"$threadLocalStr"
   }
 
   import ressort.hi.meta._
@@ -195,14 +198,14 @@ class TpchQ19AutoPartAll(
     var join: MetaOp = litem
       .withParams(totalBits)
 
-    join = join.splitPar(threads)
-
     join = join
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
       .rename()
-      .partition('l_partkey).withHash(partHash).withParallel(threads > 1)
+      .partition('l_partkey)
+        .withHash(partHash)
+        .withParallel(threads > 1 && !threadLocal)
       .equiJoin(table, 'l_partkey,'p_partkey)
         .withHash(joinHash)
         .withCompactTable(compact)
@@ -220,6 +223,8 @@ class TpchQ19AutoPartAll(
         .aggregate(('price, PlusOp))
         .rename('price -> Cast('price, lo.LoFloat()))
         .connector(o => NestedSumFloat(o('price)))
+        .connector(o => NestedSumFloat(o(UField(0))))
+        .connector(o => NestedSumFloat(o(UField(0))))
     }
 }
 
