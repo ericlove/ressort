@@ -438,7 +438,7 @@ case class EquiJoin(
     }
     if (config.partition) {
       val hist = p.fresh("hist")
-      val part = p.fresh("part")
+      val part = p.fresh("jpart")
       val block = p.fresh("block")
       val in = p.fresh("in")
       in := split
