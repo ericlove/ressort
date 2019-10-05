@@ -177,7 +177,7 @@ class TpchQ19AutoPartAll(
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(Const(tpch.get.partSize)))) //Length('part))))
   val partBits = nbits
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
@@ -197,12 +197,12 @@ class TpchQ19AutoPartAll(
 
     join = join.splitPar(threads)
 
-    join = join.partition('l_partkey).withHash(partHash).withParallel(threads > 1)
-
     join = join
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+      .rename()
+      .partition('l_partkey).withHash(partHash).withParallel(threads > 1)
       .equiJoin(table, 'l_partkey,'p_partkey)
         .withHash(joinHash)
         .withCompactTable(compact)
