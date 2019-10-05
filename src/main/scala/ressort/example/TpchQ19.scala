@@ -55,8 +55,8 @@ trait Q19Auto { this: TpchQ19 =>
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
 
-  val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
-  val part = Concrete('part, TpchSchema.part.s.fields.map(_.name.get.name).map(Id).toSet)
+  val litem = Concrete('lineitem_, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+  val part = Concrete('part_, TpchSchema.part.s.fields.map(_.name.get.name).map(Id).toSet)
 
   val postCond = 
   ('p_brand === BRAND12.n
@@ -73,7 +73,11 @@ trait Q19Auto { this: TpchQ19 =>
   def meta: MetaOp
 
   def hiRes: Operator = {
-    meta.allOps.head
+    Let(
+      List(
+        'part_ := 'part,
+        'lineitem_ := 'lineitem),
+    in = meta.allOps.head)
   }
 }
 
@@ -145,6 +149,7 @@ class TpchQ19AutoPartAll(
     tpch: Option[TpchSchema.Generator],
     nbits: Expr,
     threads: Int=8,
+    postThreads: Int=3,
     extraHashBits: Option[Int]=None,
     slots: Int=1,
     compact: Boolean=true,
@@ -180,7 +185,7 @@ class TpchQ19AutoPartAll(
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(Const(tpch.get.partSize)))) //Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
   val partBits = nbits
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
@@ -198,7 +203,10 @@ class TpchQ19AutoPartAll(
     var join: MetaOp = litem
       .withParams(totalBits)
 
+
     join = join
+      .splitPar(threads)
+      .splitSeq(postThreads)
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
@@ -214,17 +222,17 @@ class TpchQ19AutoPartAll(
         .withSlots(Const(slots))
         .withHash(joinHash)
         .withBlockBuild(blockBuild)
-        .withBlockHash(!buildPartitioned)
+        .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
 
       join
         .filter(postCond)
         .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
         .aggregate(('price, PlusOp))
-        .rename('price -> Cast('price, lo.LoFloat()))
-        .connector(o => NestedSumFloat(o('price)))
-        .connector(o => NestedSumFloat(o(UField(0))))
-        .connector(o => NestedSumFloat(o(UField(0))))
+        .nestedSumDouble('price)
+        .nestedSumDouble(UField(0), mute = threads <= 1 || !threadLocal)
+        .nestedSumDouble(UField(0), mute = postThreads <= 1)
+        .cast(UField(0), lo.LoFloat())
     }
 }
 
