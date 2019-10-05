@@ -497,7 +497,7 @@ case class EquiJoin(
       val numLeft = left.fields.size
       Eval(
         Project(
-          name.get,
+          IdOp(name.get).projFields(left.fields.filter(_ != lkey).toSeq:_*),
           Gather(
             name.get(UField(numLeft+1)),
             right.name.get)),
