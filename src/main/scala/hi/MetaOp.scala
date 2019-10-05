@@ -385,7 +385,7 @@ case class HashPartition(
 object HashPartition {
   case class Config(
       hash: HashConfig = HashConfig(),
-      gather: MetaParam[Boolean] = true,
+      gather: MetaParam[Boolean] = false,
       block: MetaParam[Boolean] = false,
       parallel: MetaParam[Boolean] = false) {
     def splat: Seq[Config] = {

@@ -141,6 +141,88 @@ case class TpchQ19AutoNopa(
 
 }
 
+class TpchQ19AutoPartAll(
+    tpch: Option[TpchSchema.Generator],
+    nbits: Expr,
+    threads: Int=8,
+    extraHashBits: Option[Int]=None,
+    slots: Int=1,
+    compact: Boolean=true,
+    earlyMatPart: Boolean=true,
+    earlyMat: Boolean=true,
+    buildPartitioned: Boolean=true,
+    blockBuild: Boolean=true,
+    twoSided: Boolean=true,
+    inline: Boolean=true)
+  extends TpchQ19(tpch) with Q19Auto {
+
+
+  val name = {
+    val threadsStr = s"_${threads}t"
+    val useHashStr = extraHashBits.map(_.toString.replace("-", "m")).map(n => s"_hash${n}eb").getOrElse("")
+    val slotsStr = s"_${slots}s"
+    val compactStr = if (compact) "_cpct" else ""
+    val earlyMatPartStr = if (earlyMatPart) "_pem" else ""
+    val earlyMatStr = if (earlyMat) "_em" else ""
+    val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
+    val inlineStr = if (inline) "_inline" else ""
+    val nbitsStr = nbits match {
+      case Const(n) => s"_nbits$n"
+      case _ =>
+    }
+    val twoSideStr = if (twoSided) "_twos" else ""
+    s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
+      s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr"
+  }
+
+  import ressort.hi.meta._
+  import ressort.hi.meta.MetaParam._
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
+  val partBits = nbits
+  val joinBits = new ExprParam(totalBits, e => e - partBits)
+  val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
+  val partMsb = new ExprParam(totalBits, e => e - Const(1))
+  val partHash = HashConfig(bits = partBits, msb = partMsb)
+  val joinHash = HashConfig(bits = joinBits, msb = joinMsb)
+
+  val meta = {
+    var table: MetaOp = part
+    table = table.splitPar(threads)
+    table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
+    if (earlyMat) table = table.rename()
+    if (threads > 1) table = table.flatten
+
+    var join: MetaOp = litem
+      .withParams(totalBits)
+
+    join = join.splitPar(threads)
+
+    join = join.partition('l_partkey).withHash(partHash).withParallel(threads > 1)
+
+    join = join
+      .filter(
+        ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
+        ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+      .equiJoin(table, 'l_partkey,'p_partkey)
+        .withHash(joinHash)
+        .withCompactTable(compact)
+        .withInlineCounter(inline)
+        .withGather(!earlyMat)
+        .withSlots(Const(slots))
+        .withHash(joinHash)
+        .withBlockBuild(blockBuild)
+        .withBlockHash(!buildPartitioned)
+        .withPartition(partition=buildPartitioned, threads=threads)
+
+      join
+        .filter(postCond)
+        .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
+        .aggregate(('price, PlusOp))
+        .rename('price -> Cast('price, lo.LoFloat()))
+        .connector(o => NestedSumFloat(o('price)))
+    }
+}
+
 object TpchQ19 {
   val funcType =
     Func(
