@@ -127,7 +127,7 @@ class OffsetsProblemInstance(
     // If we control any arrays (surrounding the partitions vector), then we need to
     // set the state for those outside of the outermost partition loop
     val outerState = {
-      if (ins.length > 1) {
+      if (ins.length > 1 && op.depth > 0) {
         val insRev = ins.reverse
         val outsRev = outs.reverse
         insRev.tail.head.globalState +

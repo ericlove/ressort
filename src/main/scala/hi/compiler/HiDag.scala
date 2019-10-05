@@ -234,7 +234,7 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
         val (output, newBuffers) = arrayGenerator.apply(arrayOp.typed, dagInputs.map(_.output), nodeId)
         val node = new HiDag(arrayOp, dagInputs, output, newBuffers)
         node.nodeId = nodeId
-        node.inputs.map(_.seenBy +:= node)
+        dagInputs.map(_.seenBy +:= node)
         node
       }
     }
@@ -310,9 +310,7 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
           arrayInputs       = List(false),
           blockingOutput    = true,
           typed             = typedOp.copy(o = newOp),
-          nonFusable        = o.depth > 1 || !o.inPlace,
-          lowersNestingLevel = true,
-          raisesNestingLevel = true,
+          nonFusable        = o.depth >= 1 || !inPlace,
           isNestedReduction = false,
           isInternalReduction = !inPlace,
           skipLoopLevels    = o.depth,
