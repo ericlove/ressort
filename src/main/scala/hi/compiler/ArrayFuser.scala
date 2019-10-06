@@ -14,12 +14,12 @@ class ArrayFuser(arrayGen: OutputArrayGenerator) extends HiDagTransform[HiDag] {
     // Attempt fusion from depth=1 to depth=..., until no new fused DAGs produced
     while (fusedDags.nonEmpty) {
       fusionDepth += 1
-      end.depthFirst { n => n.regenerateFromInputs(arrayGen) }
       var next = Seq[HiDag]()
       for (d <- fusedDags) {
         val res = d.internalDag.map(updateInternal(_, fusionDepth))
         res.map(next ++= _._2)
       }
+      end.depthFirst { n => n.regenerateFromInputs(arrayGen) }
       fusedDags = next
     }
     end
@@ -31,29 +31,15 @@ class ArrayFuser(arrayGen: OutputArrayGenerator) extends HiDagTransform[HiDag] {
     *           and a [[Seq]] of any resulting fused DAG nodes.
     */
   private def updateInternal(dag: HiDag, fusionDepth: Int=1): (HiDag, Seq[HiDag]) = {
-    val end = balanceNesting(dag)
-    val segmenter = new ArraySegmenter(end, fusionDepth)
+    val segmenter = new ArraySegmenter(dag, fusionDepth)
     val cliques = segmenter.doSegmentation()
     val fusedDags = if (!cliques.isEmpty) {
       val fuser = new HiDagFuser(cliques, fusionDepth, false, arrayGen)
-      fuser.updateDag(end)
+      fuser.updateDag(dag)
     } else {
       Seq()
     }
-    (end, fusedDags)
-  }
-
-  /** Adds fake flattening nodes to the end of this HiDag until depth is zero */
-  private def balanceNesting(dag: HiDag): HiDag = {
-    val depth = dag.output.depth
-    var res = dag
-    for (i <- 0 until depth) {
-      val xthru = res.passthrough()
-      res.seenBy = List(xthru)
-      res = xthru
-      res.op = res.op.copy(lowersNestingLevel = true)
-    }
-    res
+    (dag, fusedDags)
   }
 }
 
@@ -87,6 +73,7 @@ class ArraySegmenter(dag: HiDag, fusionDepth: Int) {
     val res =
           d.internalDag.nonEmpty  ||
           d.op.isNestedReduction ||
+          d.seenBy.isEmpty ||
           d.op.hiOp.isInstanceOf[hi.Uncat] ||
           d.op.hiOp.isInstanceOf[hi.Cat] ||
           d.op.hiOp.isInstanceOf[hi.DagOp]
@@ -140,7 +127,7 @@ class ArraySegmenter(dag: HiDag, fusionDepth: Int) {
         excludeN()
       } else if (n.seenBy.isEmpty) {
         debugln(s"Implicit terminator $n ${n.op.hiOp}")
-        flatteners += n
+        excludeN()
       }
 
       if (n.op.nonFusable) excludeN()
