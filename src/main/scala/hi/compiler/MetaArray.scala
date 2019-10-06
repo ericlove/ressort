@@ -1161,7 +1161,7 @@ case class DisjointBase(
     val istr = buffer.initializer.map(i => s", init: ${i(id)}").getOrElse("")
     val immat = if (buffer.immaterial) " [IMMAT]" else ""
     val alloc = if (buffer.allocate) " [ALLOC]" else ""
-    "  "*indent + s"DisjointBase(${buffer.name}$immat$alloc, ${pointers.name}, ${mask.map(_.name)}, len=$length$istr)"
+    "  "*indent + s"DisjointBase(${buffer.name}$immat$alloc, ${pointers.name} (${pointers.allocate}), ${mask.map(_.name)}, len=$length$istr)"
   }
 
   def struct: Struct = {
