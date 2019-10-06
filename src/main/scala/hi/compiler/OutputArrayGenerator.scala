@@ -129,20 +129,23 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
 
       // Allocate a "slice length histogram" if this a nested collect and none yet exists
       var newHist = false
-      val (arr, sliceLengths) = arrInput match {
+      val (arr, sliceLengths, numValidAllocs) = arrInput match {
         case n: NestedArray => {
           newHist = n.numValid.isEmpty
+          var allocs = Set[Buffer]()
           val numValid =
             n.numValid.map(_.cloneRef()) getOrElse makeSliceLengths(n)
           if (newHist) {
             numValid.buffer.name = name(op, "slen")
+            numValid.buffers.map(_.mustMaterialize = true)
+            allocs ++= numValid.buffers
           }
           val arr = n.withBase(newBase)
             .asNestedArray.get
             .withSliceLengths(Some(numValid))
-          (arr, Some(numValid))
+          (arr, Some(numValid), allocs)
         }
-        case other => (newBase, None)
+        case other => (newBase, None, Set[Buffer]())
       }
 
       // If this is a flat array collect, introduce a numValid counter that will be
@@ -155,8 +158,7 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
         case _ =>
       }
 
-      val histBuf: List[Buffer] = if (newHist) sliceLengths.map(_.buffer).toList else Nil
-      (arr, histBuf ++ baseAllocs)
+      (arr, numValidAllocs.toList ++ baseAllocs)
     }
         
     case o: Offsets => {
