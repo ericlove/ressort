@@ -41,7 +41,6 @@ class LastArrayProblemInstance(
     val j = generator.elaboration.tempIds.newId("j")
 
     input.globalState +
-    output.globalState +
     output.resetLocalState +
     ForSeq(
         j,
