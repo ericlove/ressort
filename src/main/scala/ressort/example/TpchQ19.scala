@@ -146,22 +146,22 @@ case class TpchQ19AutoNopa(
 }
 
 class TpchQ19AutoPartAll(
-    tpch: Option[TpchSchema.Generator],
-    partSize: Expr = Const(12),
-    partBits: Expr = Const(6),
-    threads: Int=16,
-    preThreads: Int=0,
-    postThreads: Int=0,
-    extraHashBits: Option[Int]=None,
-    slots: Int=1,
-    compact: Boolean=true,
-    earlyMatPart: Boolean=true,
-    earlyMat: Boolean=true,
-    buildPartitioned: Boolean=false,
-    blockBuild: Boolean=true,
-    twoSided: Boolean=true,
-    threadLocal: Boolean=true,
-    inline: Boolean=true)
+    val tpch: Option[TpchSchema.Generator],
+    val partSize: Expr = Const(12),
+    val partBits: Expr = Const(6),
+    val threads: Int=16,
+    val preThreads: Int=0,
+    val postThreads: Int=0,
+    val extraHashBits: Option[Int]=None,
+    val slots: Int=1,
+    val compact: Boolean=true,
+    val earlyMatPart: Boolean=true,
+    val earlyMat: Boolean=true,
+    val buildPartitioned: Boolean=false,
+    val blockBuild: Boolean=true,
+    val twoSided: Boolean=true,
+    val threadLocal: Boolean=true,
+    val inline: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
 
 
