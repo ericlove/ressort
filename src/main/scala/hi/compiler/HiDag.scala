@@ -46,7 +46,7 @@ class HiDag(
       * Note that the caller must effectuate the insertion by setting `this.seenBy`
       */
     def passthrough(): HiDag = {
-      val hiOp = hi.DagOp()
+      val hiOp = hi.DagOp(Some(-77))
       val output = this.output.cloneRef()
       new HiDag(
         op =

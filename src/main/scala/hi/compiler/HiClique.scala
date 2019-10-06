@@ -48,23 +48,23 @@ case class HiClique(interior: Set[HiDag]) {
 
   def print(): Unit = {
     println(s"ABOVE:")
-    above map { n => println(s"\t${n.op.typed.o}") }
+    above map { n => println(s"\t$n ${n.op.typed.o}") }
     println(s"TOP:")
-    top map { n => println(s"\t${n.op.typed.o}") }
+    top map { n => println(s"\t$n ${n.op.typed.o}") }
     println("INTERIOR:")
-    interior map { n => println(s"\t${n.op.typed.o}") }
+    interior map { n => println(s"\t$n ${n.op.typed.o}") }
     if (bottom.nonEmpty) {
       println(s"BOTTOM:\n(ext-vis) [${bottom.head.op.typed.o}]")
       for (o <- Set(bottom.head) ++ bottom.tail) {
-        println(s"\t${o.op.typed.o}")
+        println(s"\t$o ${o.op.typed.o}")
         for (s <- o.seenBy) {
           val str = if (interior.contains(s)) "" else "-X-"
-          println(s"\t\t${s.op.typed.o} $str")
+          println(s"\t\t$s ${s.op.typed.o} $str")
         }
       }
     }
     println("BELOW:")
-    below map { n => println(s"\t${n.op.typed.o}") }
+    below map { n => println(s"\t$n ${n.op.typed.o}") }
     println()
     println()
   }

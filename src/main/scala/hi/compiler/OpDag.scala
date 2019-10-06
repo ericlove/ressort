@@ -112,7 +112,11 @@ trait OpDag[A, O, +D <: OpDag[A, O, D]] { this: D =>
           case other => other
         }
         val cursors = node match {
-          case h: HiDag if h.internalDag.nonEmpty => h.cursors.mkString(", ")
+          case h: HiDag if h.internalDag.nonEmpty => h.ownCursors.mkString(", ")
+          case _ => ""
+        }
+        val depth = node match {
+          case f: FusedNode => s"depth ${f.fusionDepth}"
           case _ => ""
         }
         
@@ -124,9 +128,11 @@ trait OpDag[A, O, +D <: OpDag[A, O, D]] { this: D =>
           case _ => ""
         }
         builder ++= s"$newIndent ($nodeStr) ${opStr.take(maxChar)}$dots\n"
-        if (node.isInstanceOf[HiDag]) {
-          builder ++= s"$inline\tOutput type: ${outType.take(maxLine)}\n"
-          builder ++= s"$inline\tCursors: [$cursors]\n"
+        node match {
+          case h: HiDag =>
+            builder ++= s"$inline\tOutput type: ${outType.take(maxLine)}\n"
+            builder ++= s"$inline\tOwn Cursors: [$cursors] $depth\n"
+          case _ =>
         }
         if (view.isEmpty) {
           array.map(a => builder ++= a.mkString(indent+5))
@@ -219,6 +225,16 @@ trait DoublyLinkedDagLike[A, O, D <: DoublyLinkedDagLike[A, O, D]] extends OpDag
   def dominatorSets(reverse: Boolean=false): Map[D, Set[D]] = {
     val dmap = HashMap[D, Set[D]]()
     breadthFirstReverse(dmap(_) = Set[D]())
+    depthFirst { n =>
+      for (i <- n.inputs) {
+        if (!i.seenBy.contains(n)) {
+            println(s"Missing $i : ${i.asInstanceOf[HiDag].op.hiOp} at node $n {n.asInstanceOf[HiDag].op.hiOp}")
+            i.seenBy.map(_.asInstanceOf[HiDag]).map(n => s"$n : ${n.op.hiOp}").map(println)
+            println()
+            ???
+          }
+        }
+      }
 
     if (reverse) {
       breadthFirstReverse { n =>
@@ -232,6 +248,17 @@ trait DoublyLinkedDagLike[A, O, D <: DoublyLinkedDagLike[A, O, D]] extends OpDag
       }
     } else {
       breadthFirstTraverse { n =>
+        for (i <- n.inputs) {
+          if (!dmap.contains(i)) {
+            println(s"Missing $i : ${i.asInstanceOf[HiDag].op.hiOp}")
+            println()
+            breadthFirstReverse(n => n.asInstanceOf[HiDag]).map(n => s"$n ${n.op.hiOp}").map(println)
+            println()
+            depthFirst(n => n.asInstanceOf[HiDag]).map(n => s"$n ${n.op.hiOp}").map(println)
+            print()
+            ???
+          }
+        }
         n.inputs.map(i => dmap(i) ++= dmap(n) + n)
       }
     }

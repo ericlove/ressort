@@ -34,6 +34,18 @@ class HiDagFuser(
       HiClique(c.interior + bottom)
     }
 
+    if (debug) {
+      for (c1 <- cliques) {
+        for (c2 <- cliques.filter(_ != c1)) {
+          for (n <- c1.interior) {
+            lazy val c1str = c1.interior.map(n => s"$n ${n.op.hiOp}").mkString("\n")
+            lazy val c2str = c2.interior.map(n => s"$n ${n.op.hiOp}").mkString("\n")
+            assert(!c2.interior.contains(n), s"$n ${n.op.hiOp} duplicated:\n$c1str\n\n\n$c2str")
+          }
+        }
+      }
+    }
+
     // Replace all references to Cat()'d nodes with corresponding Uncat()s in cliques
     val newCliques = catCliques.filter(_.top.nonEmpty)
 
@@ -76,20 +88,27 @@ private class SingleCliqueFusion(
   for (n <- clique.above) {
     debugln(s"\t$n ${n.op.typed.o}")
     n.seenBy = n.seenBy map { child =>
-      if (clique.top.contains(child)) {
+      if (clique.interior.contains(child)) {
         fusedNode
       } else { 
         child
       }
     }
   }
-  debugln("#"*90)
 
   // Replace references to this segment in the input lists at other nodes
-  for (n <- clique.bottom.head.seenBy) {
-    n.inputs = n.inputs map { i => if (i == clique.bottom.head) fusedNode else i }
+  for (n <- clique.below) {
+    n.inputs = n.inputs map { i => 
+      if (clique.interior.contains(i)) {
+        fusedNode
+      } else {
+        i
+      } 
+    }
   }
-  clique.bottom.head.seenBy = Nil
+  clique.bottom.map(_.seenBy = Nil)
+
+  debugln("#"*90)
 
   assert(
     !clique.above.isEmpty,
@@ -122,7 +141,6 @@ private class SingleCliqueFusion(
       hi.Func(fromType, toType)
     }
 
-    debugln("-"*90)
 
     val op = 
       HiArrayOp(
@@ -151,7 +169,9 @@ private class SingleCliqueFusion(
         cursors_ = cursors,
         lastLevelLoop = lastLevelLoop,
         linkLoops = true)
+    res.ownCursors += cursor
     res.regenerateFromInputs(arrayGenerator)
+    debugln("-"*90)
     res
   }
 
