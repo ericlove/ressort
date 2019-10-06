@@ -509,6 +509,7 @@ sealed abstract class NestedArray extends MetaArray {
   def ancillary(recType: Primitive, length: Expr, name: SymLike): MetaArray = {
     def helper(array: MetaArray): MetaArray with DisjointArray = {
       array match {
+        case n: EmptyShellArray => DisjointSlice(helper(n.base), slices = n.length, shell=true)
         case n: NestedArray => DisjointSlice(helper(n.base), slices = n.length)
         case _ => {
           val buffer = Buffer(recType, length * deepNumSlices, name)
@@ -897,6 +898,7 @@ case class DisjointSlice(
     base: MetaArray with DisjointArray,
     slices: Expr,
     numValid: Option[MetaArray]=None,
+    shell: Boolean=false,
     allocFromNumValid: Boolean=false)
   extends NestedArray with DisjointArray {
 
@@ -916,11 +918,15 @@ case class DisjointSlice(
 
   override def cloneContiguous: (MetaArray, List[Buffer]) = {
     val (newBase, allocs) = base.cloneContiguous
-    val arr = SlicedArray(
+    val arr = if (shell) {
+      EmptyShellArray(base = newBase)
+    } else {
+      SlicedArray(
       base = newBase,
       slices = slices,
       numValid = numValid,
       parallel = true)
+    }
     (arr, allocs)
   }
 
@@ -1006,7 +1012,8 @@ object DisjointSlice {
       cursor: Option[SymLike]) extends StatefulNestedView(state) with DisjointArray.View with ParallelView {
 
     override def toString: String = {
-      s"DisjointSlicedView[$cursor](${state.offset}, slices = ${state.numArrays} = ${array.length} ${state.logVecLen})"
+      val name = if (array.shell) "DisjointShellView" else "DisjointSlicedView"
+      s"$name[$cursor](${state.offset}, slices = ${state.numArrays} = ${array.length} ${state.logVecLen})"
     }
 
     def globalState: LoAst = {
@@ -1035,6 +1042,16 @@ object DisjointSlice {
           HeapAlloc(Deref(ptr), numValid.get.access(n)))
       } else {
         Nop
+      }
+
+      if (array.shell) {
+        return (state.offset := (Index(true), base.offset)) +
+          (state.physVecLen := (Index(), state.avgPhysVecLen)) +
+            (state.logVecLen := (Index(), state.physVecLen - array.padding)) +
+            (state.ptrOffset := (Index(true), base.ptrOffset)) +
+            alloc +
+            (state.ptr := (Ptr(Arr(array.recType)), base.absolutePointer(state.ptrOffset))) +
+            (UseSym(absolutePointer(0).root, state.ptr))
       }
 
       (state.index := Safe(n)) +
