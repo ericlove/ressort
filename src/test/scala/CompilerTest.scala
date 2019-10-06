@@ -143,7 +143,7 @@ class TpchQ19PartSingleBlockTest extends CompilerTest(new TpchQ19PartSingle(Some
 class TpchQ19PartAllEmTest extends CompilerTest(new TpchQ19PartAll(Some(CompilerTest.tpch), nbits=CompilerTest.lbits, earlyMat=true) :: Nil)
 class AllTpchQ19PartAllTests extends CompilerTest(CompilerTest.q19partAllTests)
 class TpchQ19AutoNopaTest extends CompilerTest(new TpchQ19AutoNopa(Some(CompilerTest.tpch)) :: Nil)
-class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPartAll(Some(CompilerTest.tpch), nbits=CompilerTest.lbits) :: Nil)
+class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPartAll(Some(CompilerTest.tpch), partBits=CompilerTest.lbits) :: Nil)
 class TpchQ19Tests extends CompilerTest(CompilerTest.q19tests)
 
 class Htbl1Test extends CompilerTest(new Htbl1(CompilerTest.tpch) :: Nil)

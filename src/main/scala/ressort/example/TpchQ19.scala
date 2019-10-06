@@ -147,8 +147,10 @@ case class TpchQ19AutoNopa(
 
 class TpchQ19AutoPartAll(
     tpch: Option[TpchSchema.Generator],
-    nbits: Expr,
-    threads: Int=0,
+    partSize: Expr = Const(12),
+    partBits: Expr = Const(6),
+    threads: Int=16,
+    preThreads: Int=0,
     postThreads: Int=0,
     extraHashBits: Option[Int]=None,
     slots: Int=1,
@@ -172,21 +174,22 @@ class TpchQ19AutoPartAll(
     val earlyMatStr = if (earlyMat) "_em" else ""
     val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
     val inlineStr = if (inline) "_inline" else ""
-    val nbitsStr = nbits match {
+    val nbitsStr = partBits match {
       case Const(n) => s"_nbits$n"
       case _ =>
     }
     val twoSideStr = if (twoSided) "_twos" else ""
     val threadLocalStr = if (threadLocal) "_tlocal" else ""
+    val preThreadsStr = s"_${preThreads}prth"
+    val postThreadsStr = s"_${postThreads}psth"
     s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
       s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr" +
-      s"$threadLocalStr"
+      s"$threadLocalStr$preThreadsStr$postThreadsStr"
   }
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(tpch.get.partSize))) //Length('part))))
-  val partBits = nbits
+  val totalBits = new ParamList[Expr](List(Log2Up(partSize)))
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
   val partMsb = new ExprParam(totalBits, e => e - Const(1))
@@ -195,20 +198,27 @@ class TpchQ19AutoPartAll(
 
   val meta = {
     var table: MetaOp = part
-    if (threadLocal)
+
+    val probeDepth = {
+      var d = 0
+      if (threads > 1) d += 1
+      if (threadLocal && threads > 1) d += 1
+      if (postThreads > 1) d += 1
+      if (preThreads > 1) d += 1
+      d
+    }
+
+    for (i <- 1 to probeDepth-1)
       table = table.shell
-    if (postThreads > 1)
-      table = table.shell
+
     table = table.splitPar(threads)
     table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
-    if (earlyMat) table = table.rename()
-    //if (threads > 1) table = table.flatten
+    table = table.rename()
 
-    var join: MetaOp = litem
-      .withParams(totalBits)
-
+    var join: MetaOp = litem.withParams(totalBits)
 
     join = join
+      .splitSeq(preThreads)
       .splitPar(threads)
       .splitSeq(postThreads)
       .filter(
@@ -218,32 +228,34 @@ class TpchQ19AutoPartAll(
       .partition('l_partkey)
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
+        .withGather(!earlyMat)
 
-    if (postThreads > 1 || threadLocal && threads > 1)
-      join = join.shell
+    join = join.shell
 
     join = join
       .equiJoin(table, 'l_partkey,'p_partkey)
         .withHash(joinHash)
         .withCompactTable(compact)
         .withInlineCounter(inline)
-        .withGather(!earlyMat)
         .withSlots(Const(slots))
         .withHash(joinHash)
+        .withGather(false)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
 
-      join
+    join = join
         .filter(postCond)
         .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
         .aggregate(('price, PlusOp))
         .nestedSumDouble('price)
-        .nestedSumDouble(UField(0), mute = threads <= 1 || !threadLocal)
-        .nestedSumDouble(UField(0), mute = !threadLocal || threads <= 1)
-        .nestedSumDouble(UField(0), mute = postThreads <= 1)
-        .cast(UField(0), lo.LoFloat())
-    }
+
+    for (i <- 1 to probeDepth)
+      join = join.nestedSumDouble(UField(0))
+
+    join
+      .cast(UField(0), lo.LoFloat())
+  }
 }
 
 object TpchQ19 {
