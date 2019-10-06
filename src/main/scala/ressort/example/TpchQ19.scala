@@ -148,14 +148,14 @@ case class TpchQ19AutoNopa(
 class TpchQ19AutoPartAll(
     tpch: Option[TpchSchema.Generator],
     nbits: Expr,
-    threads: Int=8,
-    postThreads: Int=3,
+    threads: Int=0,
+    postThreads: Int=0,
     extraHashBits: Option[Int]=None,
     slots: Int=1,
     compact: Boolean=true,
     earlyMatPart: Boolean=true,
     earlyMat: Boolean=true,
-    buildPartitioned: Boolean=true,
+    buildPartitioned: Boolean=false,
     blockBuild: Boolean=true,
     twoSided: Boolean=true,
     threadLocal: Boolean=true,
@@ -185,7 +185,7 @@ class TpchQ19AutoPartAll(
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(tpch.get.partSize))) //Length('part))))
   val partBits = nbits
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
@@ -195,10 +195,14 @@ class TpchQ19AutoPartAll(
 
   val meta = {
     var table: MetaOp = part
+    if (threadLocal)
+      table = table.shell
+    if (postThreads > 1)
+      table = table.shell
     table = table.splitPar(threads)
     table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
     if (earlyMat) table = table.rename()
-    if (threads > 1) table = table.flatten
+    //if (threads > 1) table = table.flatten
 
     var join: MetaOp = litem
       .withParams(totalBits)
@@ -214,6 +218,11 @@ class TpchQ19AutoPartAll(
       .partition('l_partkey)
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
+
+    if (postThreads > 1 || threadLocal && threads > 1)
+      join = join.shell
+
+    join = join
       .equiJoin(table, 'l_partkey,'p_partkey)
         .withHash(joinHash)
         .withCompactTable(compact)
@@ -231,6 +240,7 @@ class TpchQ19AutoPartAll(
         .aggregate(('price, PlusOp))
         .nestedSumDouble('price)
         .nestedSumDouble(UField(0), mute = threads <= 1 || !threadLocal)
+        .nestedSumDouble(UField(0), mute = !threadLocal || threads <= 1)
         .nestedSumDouble(UField(0), mute = postThreads <= 1)
         .cast(UField(0), lo.LoFloat())
     }
