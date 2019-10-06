@@ -12,7 +12,7 @@ class TpchQ06(threads: Int, crack: Boolean, collect: Boolean=false, tpch: Option
 
   val funcType = TpchQ06.funcType 
 
-  val hiRes = TpchQ06.query(threads, crack, minDate = minDate)
+  val hiRes = TpchQ06.query(threads, crack, collect, minDate = minDate)
 
   override val check: Option[lo.LoAst] = this.tpch map { tpch =>
     var sum = 0.0.toDouble

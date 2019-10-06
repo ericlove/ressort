@@ -128,8 +128,9 @@ class AllCornerTests extends CompilerTest(CompilerTest.cornerTests)
 class AllQueryTests extends CompilerTest(CompilerTest.queryTests)
 
 class TpchQ01Test extends CompilerTest(new TpchQ01(CompilerTest.tpch) :: Nil) 
-class TpchQ06Test extends CompilerTest(new TpchQ06(threads=16, crack=true, tpch=Some(CompilerTest.tpch)) :: Nil)
+class TpchQ06Test extends CompilerTest(new TpchQ06(threads=16, crack=false, tpch=Some(CompilerTest.tpch)) :: Nil)
 class TpchQ06CrackTest extends CompilerTest(new TpchQ06(threads=1, crack=true, tpch=Some(CompilerTest.tpch)) :: Nil)
+class TpchQ06CollectTest extends CompilerTest(new TpchQ06(threads=8, crack=true, collect=true, tpch=Some(CompilerTest.tpch)) :: Nil)
 
 class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.smallTpch) :: Nil)
 
