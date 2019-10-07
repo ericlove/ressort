@@ -147,11 +147,11 @@ case class TpchQ19AutoNopa(
 
 class TpchQ19AutoPartAll(
     val tpch: Option[TpchSchema.Generator],
-    val partSize: Expr = Const(12),
+    val partSize: Expr = Const(1 << 12),
     val partBits: Expr = Const(6),
     val threads: Int=16,
     val preThreads: Int=0,
-    val postThreads: Int=0,
+    val postThreads: Int=0,,
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=true,
