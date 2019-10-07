@@ -212,8 +212,8 @@ class TpchQ19AutoPartAll(
       table = table.shell
 
     table = table.splitPar(threads)
-    table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
     table = table.rename()
+    table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
 
     var join: MetaOp = litem.withParams(totalBits)
 
