@@ -151,7 +151,7 @@ class TpchQ19AutoPartAll(
     val partBits: Expr = Const(6),
     val threads: Int=16,
     val preThreads: Int=0,
-    val postThreads: Int=0,,
+    val postThreads: Int=0,
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=true,
