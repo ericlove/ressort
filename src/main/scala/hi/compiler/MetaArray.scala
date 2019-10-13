@@ -49,7 +49,7 @@ class Buffer(
     if (allocate && !immaterial) {
       Dec(name, Ptr(Arr(recType))) +
           HeapAlloc(name, Some(length)) +
-          initializer.map(init => ForBlock(i, length, init(Deref(name).sub(i)))).getOrElse(Nop) +
+          initializer.map(init => IPar(i, length, init(Deref(name).sub(i)))).getOrElse(Nop) +
           decNv
     } else if (allocate && immaterial) {
       // Immaterialized arrays must be declared inside the loop where they are used!
@@ -66,7 +66,7 @@ class Buffer(
   def destructor: LoAst = {
     lazy val i = MetaArray.tempIds.newId("i")
     if (allocate && !immaterial) {
-      finalizer.map(fin => ForBlock(i, length, fin(Deref(name).sub(i)))).getOrElse(Nop) +
+      finalizer.map(fin => IPar(i, length, fin(Deref(name).sub(i)))).getOrElse(Nop) +
           Free(name)
     } else if (allocate && immaterial) {
       finalizer.map(fin => fin(name)).getOrElse(Nop)
@@ -1119,7 +1119,7 @@ case class DisjointBase(
     val i = MetaArray.tempIds.newId("i")
     val len = (buffer.length / slices) + (buffer.length % slices)
     HeapAlloc(rec, Some(len)) +
-    buffer.initializer.map(init => ForBlock(i, len, init(Deref(rec).sub(i)))).getOrElse(Nop)
+    buffer.initializer.map(init => IPar(i, len, init(Deref(rec).sub(i)))).getOrElse(Nop)
   }
 
   def ancillary(recType: Primitive, length: Expr, name: SymLike): MetaArray  = {
@@ -1524,7 +1524,7 @@ case class ChunkArray(
 //      val cur = LoSym(new SymId("cur"))
 //      (next := (Ptr(rec), rec.dash('list))) +
 //          (cur := (Ptr(rec), rec.dash('list))) +
-//          ForBlock(j, (Deref(counts.buffer.name).sub(i) + chunkSize - 1) / chunkSize,
+//          IPar(j, (Deref(counts.buffer.name).sub(i) + chunkSize - 1) / chunkSize,
 //            (next := cur.dash('next)) +
 //                (Free(cur)) +
 //                (cur := next)))
