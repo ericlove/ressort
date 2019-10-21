@@ -62,17 +62,15 @@ object TpchQ06 {
   def query(threads: Int=1, crack: Boolean=false, collect: Boolean=false, pad: Int=4096, minDate: Int=constants.minDate): Operator = {
     val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
 
-    val predicates =
-      List(
-        'l_shipdate > minDate && 'l_shipdate < constants.maxDate,
-        'l_discount > constants.minDiscount && 'l_discount < constants.maxDiscount,
-        'l_quantity < constants.maxQuantity)
-
     var meta: MetaOp = litem
 
     meta = meta
       .splitPar(Const(threads))
-      .filter(predicates:_*).withCracked(crack).withCollect(collect)
+      .filter(
+        'l_shipdate > minDate && 'l_shipdate < constants.maxDate,
+        'l_discount > constants.minDiscount && 'l_discount < constants.maxDiscount,
+        'l_quantity < constants.maxQuantity)
+          .withCracked(crack).withCollect(collect)
       .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
       .aggregate(('revenue, PlusOp))
       .nestedSumDouble('revenue, mute = threads < 2)

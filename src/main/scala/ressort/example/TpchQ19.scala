@@ -81,6 +81,34 @@ trait Q19Auto { this: TpchQ19 =>
   }
 }
 
+case class TpchQ19Simple(tpch: Option[TpchSchema.Generator]) extends TpchQ19(tpch) with Q19Auto {
+  import ressort.hi.meta._
+  import ressort.hi.meta.MetaParam._
+  override val name = s"Q19Simple"
+  val totalBits = new ParamList[Expr](List(Log2Up(tpch.get.partSize)))
+  val joinBits = new ExprParam(totalBits, e => e + Const(-6))
+  val joinHash = HashConfig(bits = joinBits)
+  import ressort.lo.{LoFloat, LoDouble}
+  val partLen = tpch.map(_.partSize).getOrElse(60e5.toInt)
+  val meta = {
+    litem
+        .withParams(totalBits)
+        .shell
+        .filter(
+            ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
+            ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+        .equiJoin(part.rename(), 'l_partkey,'p_partkey)
+            .withHash(HashConfig(bits = Log2Up(Length('part))))
+        .filter(postCond)
+        .rename('price ->
+            Cast('l_extendedprice, LoDouble()) * (DoubleConst(1.0) - 'l_discount))
+        .aggregate(('price, PlusOp))
+        .nestedSumDouble(UField(0))
+        .cast(UField(0), LoFloat())
+  }
+
+}
+
 case class TpchQ19AutoNopa(
     tpch: Option[TpchSchema.Generator],
     threads: Int=4,
@@ -130,7 +158,6 @@ case class TpchQ19AutoNopa(
         .withInlineCounter(inline)
         .withGather(!earlyMat)
         .withSlots(slots)
-        .withHash(joinHash)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
