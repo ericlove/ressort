@@ -462,7 +462,8 @@ private class OperatorTypeCheck(o: Operator, externalEnv: Map[Id, HiType]) {
 
   /** Returns the output structure for a parallel-input operator with given scalar `base` */
   private def broadcastResultType(base: Scalar, inputs: Seq[Data]): Data = {
-    inputs.head.withSubVec(base)
+    val deepest = inputs.sortWith(_.depth > _.depth).head
+    deepest.withSubVec(base)
   }
 
   private def checkSameType[T <: Data: Manifest](
