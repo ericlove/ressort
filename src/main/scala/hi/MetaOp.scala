@@ -86,7 +86,9 @@ sealed trait MetaOp {
   def equiJoin(right: MetaOp, lkey: Id, rkey: Id): EquiJoin = EquiJoin(this, right, lkey, rkey)
   def filter(conds: Expr*): Filter = Filter(this, conds.toSeq)
   def aggregate(aggregates: (Id, CommutativeOp)*): Aggregate = Aggregate(this, aggregates.toList)
-  def partition(key: Id): HashPartition = HashPartition(this, key)
+  def partition(key: Id, renamed: Option[MetaOp=>MetaOp]=None): HashPartition = {
+    HashPartition(this, key, renamed = renamed.map(f => f(this)))
+  }
   def flatten: MetaOp = Connector(this, Flatten(_))
   def shell: MetaOp = Connector(this, Shell(_))
   def splitPar(slices: Expr) = slices match {
@@ -152,9 +154,6 @@ sealed trait MetaOp {
         case r: Rename =>
           r.copy(renames = r.renames.filter(p => usedFields(r.id).contains(p._1)))
         case j: EquiJoin =>
-          println(s"USed fields for join: ${usedFields(j.id)}")
-          println(s"Left fields: ${usedFields(j.left.id)}")
-          println(s"Right fields: ${usedFields(j.right.id)}")
           j
         case _ => newOp
       }
@@ -190,7 +189,6 @@ object MetaOp {
       walk(dag)
       list.reverse
     }
-    ordered.map(println)
 
     private val combos = ArrayBuffer[MetaOp]()
     private val current = HashMap[MetaOpId, MetaOp]()
@@ -306,7 +304,6 @@ case class Connector(
   def concrete(implicit p: Program) = {
     val in = p.fresh("in")
     val ctor = p.fresh("ctor")
-    println(f(in))
     in := this.in
     ctor := f(in)
     copy(in = in.metaOp.get, name = Some(ctor))
@@ -345,7 +342,7 @@ case class HashPartition(
     val in = p.fresh("in")
     val hist = p.fresh("hist")
     val part = p.fresh("hpart")
-
+    val vals = p.fresh("vals")
     in := this.in
     hist := Histogram(config.hash(in(key)), slices = Pow2(config.hash.bits))
     hist := Offsets(hist, depth = (if (config.parallel) 1 else 0))
@@ -354,6 +351,7 @@ case class HashPartition(
       in := Uncat(hist, 0)
       hist := Uncat(hist, 1)
     }
+    p.rename(this.in.id, in)
     this.renamed.map(in := _)
     val values: Operator = if (config.gather) {
       Project(in(key), Position(in))
@@ -601,7 +599,6 @@ case class Rename(
 
   override def usedFields: Set[Id] = {
     val res = renames.flatMap(_._2.ids).toSet
-    println(s"Rename.usedFields: $res")
     res
   }
 
@@ -615,9 +612,6 @@ case class Rename(
     val in = p.fresh("in")
     val ren = p.fresh("ren")
     in := this.in
-    println(s"Renames:")
-    renames.map(println)
-    println(s"Used fields: $usedFields")
 
     for ((i, e) <- renames) {
       assigns ::= (i := in(e))
