@@ -1,7 +1,7 @@
 // See LICENSE.txt
 /** HiRes Programs: Syntactic sugar for constructing HiRes programs */
 package ressort.hi
-import ressort.hi.meta.{MetaOp, MetaParam, ConcreteParam}
+import ressort.hi.meta.{MetaOp, MetaOpId, MetaParam, ConcreteParam, Concrete}
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 sealed trait ProgSym {
@@ -15,6 +15,7 @@ sealed trait ProgSym {
 class Program {
   private val assigns = ArrayBuffer[Assign]()
   private val symbols = HashMap[String, List[MySym]]()
+  private val concrete = HashMap[MetaOpId, ProgSym]()
   val params = HashMap[MetaParam[_], ConcreteParam[_]]()
 
   def apply(param: MetaParam[_]): ConcreteParam[_] = params(param)
@@ -35,6 +36,14 @@ class Program {
     val res = Let(assigns.toList, in = o)
     res
   }
+
+  def rename(id: MetaOpId, sym: ProgSym): Unit = {
+    concrete(id) = sym
+  }
+
+  def reset(id: MetaOpId): Unit = {
+    concrete -= id
+  }
   
   private val program = this
 
@@ -45,22 +54,26 @@ class Program {
       o match {
         case i: IdOp =>
           assigns += Assign(i.id, IdOp(i.id))
-          println(assigns)
         case _ =>
       }
       assigns += Assign(id, o)
-      metaOp = None
+      metaOp = Some(Concrete(o, Set(), name = Some(this)))
     }
 
     def :=(o: MetaOp): Unit = {
-      metaOp = Some(o.concrete(program))
-      assigns += Assign(id, metaOp.get.name.get)
+      if (concrete.contains(o.id)) {
+        metaOp = Some(concrete(o.id).metaOp.get)
+        assigns += Assign(id, concrete(o.id))
+      } else {
+        metaOp = Some(o.concrete(program))
+        assigns += Assign(id, metaOp.get.name.get)
+      }
     }
 
     def apply(e: Expr): Operator = {
       metaOp match {
-        case Some(mop) => mop.eval(e)
-        case None => Eval(IdOp(id), e)
+        case Some(mop) if (mop.name != Some(this)) => mop.eval(e)
+        case _ => Eval(IdOp(id), e)
       }
     }
   }

@@ -182,10 +182,11 @@ class TpchQ19AutoPartAll(
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=true,
-    val earlyMatPart: Boolean=true,
+    val earlyMatTable: Boolean=false,
     val earlyMat: Boolean=true,
     val buildPartitioned: Boolean=false,
     val blockBuild: Boolean=true,
+    val blockProbe: Boolean=true,
     val twoSided: Boolean=true,
     val threadLocal: Boolean=true,
     val inline: Boolean=true)
@@ -197,7 +198,7 @@ class TpchQ19AutoPartAll(
     val useHashStr = extraHashBits.map(_.toString.replace("-", "m")).map(n => s"_hash${n}eb").getOrElse("")
     val slotsStr = s"_${slots}s"
     val compactStr = if (compact) "_cpct" else ""
-    val earlyMatPartStr = if (earlyMatPart) "_pem" else ""
+    val earlyMatTableStr = if (earlyMatTable) "_pem" else ""
     val earlyMatStr = if (earlyMat) "_em" else ""
     val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
     val inlineStr = if (inline) "_inline" else ""
@@ -210,7 +211,7 @@ class TpchQ19AutoPartAll(
     val preThreadsStr = s"_${preThreads}prth"
     val postThreadsStr = s"_${postThreads}psth"
     s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
-      s"$buildPartitionedStr$earlyMatPartStr$earlyMatStr$inlineStr$twoSideStr" +
+      s"$buildPartitionedStr$earlyMatTableStr$earlyMatStr$inlineStr$twoSideStr" +
       s"$threadLocalStr$preThreadsStr$postThreadsStr"
   }
 
@@ -235,12 +236,24 @@ class TpchQ19AutoPartAll(
       d
     }
 
-    for (i <- 1 to probeDepth-1)
+    val buildDepth = if (twoSided) 1 else 0
+
+    println(s"Probe depth $probeDepth; build depth $buildDepth")
+
+    for (i <- buildDepth until probeDepth)
       table = table.shell
 
-    table = table.splitPar(threads)
-    table = table.rename()
-    table = table.partition('p_partkey).withHash(partHash).withParallel(threads > 1)
+    if (twoSided) {
+      table = table.splitPar(threads)
+      table =
+        table
+          .partition('p_partkey, renamed = Some(_.rename()))
+          .withHash(partHash)
+          .withBlock(blockBuild)
+          .withParallel(threads > 1)
+    } else {
+      table = table.rename()
+    }
 
     var join: MetaOp = litem.withParams(totalBits)
 
@@ -251,11 +264,11 @@ class TpchQ19AutoPartAll(
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
-      .rename()
-      .partition('l_partkey)
+      .partition('l_partkey, renamed = Some(_.rename()))
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
-        .withGather(!earlyMat)
+        .withGather(false)
+        .withBlock(blockProbe)
 
     join = join.shell
 
@@ -266,7 +279,7 @@ class TpchQ19AutoPartAll(
         .withInlineCounter(inline)
         .withSlots(Const(slots))
         .withHash(joinHash)
-        .withGather(false)
+        .withGather(earlyMatTable)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
