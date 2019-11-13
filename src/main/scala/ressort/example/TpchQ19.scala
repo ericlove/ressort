@@ -172,8 +172,9 @@ case class TpchQ19AutoNopa(
 
 }
 
-class TpchQ19AutoPartAll(
+class TpchQ19AutoPart(
     val tpch: Option[TpchSchema.Generator],
+    val partAll: Boolean=false,
     val partSize: Expr = Const(1 << 12),
     val partBits: Expr = Const(6),
     val threads: Int=16,
@@ -210,7 +211,8 @@ class TpchQ19AutoPartAll(
     val threadLocalStr = if (threadLocal) "_tlocal" else ""
     val preThreadsStr = s"_${preThreads}prth"
     val postThreadsStr = s"_${postThreads}psth"
-    s"q19partall$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
+    val allStr = if (partAll) "all" else "single"
+    s"q19part$allStr$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
       s"$buildPartitionedStr$earlyMatTableStr$earlyMatStr$inlineStr$twoSideStr" +
       s"$threadLocalStr$preThreadsStr$postThreadsStr"
   }
@@ -247,9 +249,10 @@ class TpchQ19AutoPartAll(
       table = table.splitPar(threads)
       table =
         table
-          .partition('p_partkey, renamed = Some(_.rename()))
+          .partition('p_partkey, renamed = (if (partAll) Some(_.rename()) else None))
           .withHash(partHash)
           .withBlock(blockBuild)
+          .withGather(!partAll)
           .withParallel(threads > 1)
     } else {
       table = table.rename()
@@ -264,10 +267,10 @@ class TpchQ19AutoPartAll(
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
-      .partition('l_partkey, renamed = Some(_.rename()))
+      .partition('l_partkey, renamed = (if (partAll) Some(_.rename()) else None))
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
-        .withGather(false)
+        .withGather(!partAll)
         .withBlock(blockProbe)
 
     join = join.shell

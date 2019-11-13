@@ -136,14 +136,10 @@ class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.smallTpch) :: Ni
 
 class TpchQ19NopaTest extends CompilerTest(new TpchQ19Nopa(Some(CompilerTest.tpch)) ::Nil)
 class AllTpchQ19NopaTests extends CompilerTest(CompilerTest.q19nopaTests)
-class TpchQ19PartAllTest extends CompilerTest(new TpchQ19PartAll(Some(CompilerTest.tpch), nbits=CompilerTest.lbits) :: Nil)
-class TpchQ19PartSingleTest extends CompilerTest(new TpchQ19PartSingle(Some(CompilerTest.tpch), nbits=CompilerTest.lbits) :: Nil)
-class TpchQ19PartSingleThreadTest extends CompilerTest(new TpchQ19PartSingle(Some(CompilerTest.tpch), nbits=CompilerTest.lbits, threads=16) :: Nil)
-class TpchQ19PartSingleBlockTest extends CompilerTest(new TpchQ19PartSingle(Some(CompilerTest.tpch), nbits=CompilerTest.lbits, blockLitem=true) :: Nil)
-class TpchQ19PartAllEmTest extends CompilerTest(new TpchQ19PartAll(Some(CompilerTest.tpch), nbits=CompilerTest.lbits, earlyMat=true) :: Nil)
 class AllTpchQ19PartAllTests extends CompilerTest(CompilerTest.q19partAllTests)
 class TpchQ19AutoNopaTest extends CompilerTest(new TpchQ19AutoNopa(Some(CompilerTest.tpch)) :: Nil)
-class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPartAll(Some(CompilerTest.tpch), partBits=CompilerTest.lbits) :: Nil)
+class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPart(Some(CompilerTest.tpch), partBits=CompilerTest.lbits, partAll=true) :: Nil)
+class TpchQ19AutoPartSingleTest extends CompilerTest(new TpchQ19AutoPart(Some(CompilerTest.tpch), partBits=CompilerTest.lbits, partAll=false) :: Nil)
 class TpchQ19SimpleTest extends CompilerTest(new TpchQ19Simple(Some(CompilerTest.tpch)) :: Nil)
 class TpchQ19Tests extends CompilerTest(CompilerTest.q19tests)
 
