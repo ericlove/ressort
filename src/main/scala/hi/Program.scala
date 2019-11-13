@@ -8,7 +8,7 @@ sealed trait ProgSym {
   def id: Id
   def :=(o: Operator): Unit
   def :=(o: MetaOp): Unit
-  def apply(e: Expr): Operator
+  //def apply(e: Expr): Operator
   def metaOp: Option[MetaOp]
 }
 
@@ -70,11 +70,13 @@ class Program {
       }
     }
 
+    /**
     def apply(e: Expr): Operator = {
       metaOp match {
-        case Some(mop) if (mop.name != Some(this)) => mop.eval(e)
+        case Some(mop) if (mop.name != Some(this)) => mop.asOperator()(e)
         case _ => Eval(IdOp(id), e)
       }
     }
+    **/
   }
 }

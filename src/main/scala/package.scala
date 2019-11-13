@@ -51,7 +51,7 @@ package object hi {
 
   implicit def idFromProgSym[T <: ProgSym](s: T): Id = s.id
 
-  implicit def idOpFromProgSym[T <: ProgSym](s: T): Operator = IdOp(s.id)
+  implicit def opFromProgSym[T <: ProgSym](s: T): Operator = s.metaOp.get.asOperator()
 
   implicit def idListFromSymbol(sseq: Seq[(Symbol, Data)]): Seq[(Id, Data)] = {
     sseq.map { case (s, t) => Id(s.name) -> t }

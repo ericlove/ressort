@@ -112,7 +112,12 @@ sealed trait MetaOp {
 
   def complete(implicit p: Program): Operator = concrete(p).name.get
 
-  def eval(e: Expr): Operator = name.get(e)
+  def asOperator(connector: Option[Operator=>Operator]=None): Operator = {
+    connector match {
+      case Some(f) => f(name.get)
+      case _ => IdOp(name.get)
+    }
+  }
 
   def all: Seq[MetaOp] = {
     val gen = new MetaOp.Generator(this)
@@ -301,6 +306,14 @@ case class Connector(
     Seq(copy(in = generator(in)))
   }
 
+  override def asOperator(connector: Option[Operator=>Operator]=None): Operator = {
+    val f: Operator=>Operator = connector match {
+      case Some(f2) => ((o: Operator) => f2(this.f(o)))
+      case _ => this.f
+    }
+    in.asOperator(Some(f))
+  }
+
   def concrete(implicit p: Program) = {
     val in = p.fresh("in")
     val ctor = p.fresh("ctor")
@@ -367,11 +380,15 @@ case class HashPartition(
     copy(in = in.metaOp.get, name = Some(part))
   }
 
-  override def eval(e: Expr): Operator = {
+  override def asOperator(connector: Option[Operator=>Operator]=None): Operator = {
+    val base: Operator = connector match {
+      case Some(f) => f(IdOp(name.get))
+      case _ => IdOp(name.get)
+    }
     if (config.gather.asInstanceOf[FixedParam[Boolean]].fixed)
-      Gather(name.get(UField(1)), in.name.get)(e)
+      Gather(base(UField(1)), in.name.get)
     else
-      name.get(e)
+      base
   }
 
   def withHash(hash: HashConfig): HashPartition = copy(config = config.copy(hash = hash))
@@ -491,18 +508,20 @@ case class EquiJoin(
     copy(left = newLeft, right = newRight, name = Some(join))
   }
 
-  override def eval(e: Expr): Operator = {
+  override def asOperator(connector: Option[Operator=>Operator]=None): Operator = {
+    val base = connector match {
+      case Some(f) => f(name.get)
+      case _ => IdOp(name.get)
+    }
     if (config.gather.asInstanceOf[FixedParam[Boolean]].fixed) {
       val numLeft = left.fields.size
-      Eval(
-        Project(
-          IdOp(name.get).projFields(left.fields.filter(_ != lkey).toSeq:_*),
-          Gather(
-            name.get(UField(numLeft+1)),
-            right.name.get)),
-        e)
+      Project(
+        base.projFields(left.fields.filter(_ != lkey).toSeq:_*),
+        Gather(
+          base(UField(numLeft+1)),
+          right.name.get))
     } else {
-      name.get(e)
+      base
     }
   }
 
