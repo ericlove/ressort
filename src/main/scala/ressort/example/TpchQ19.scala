@@ -182,7 +182,7 @@ class TpchQ19AutoPart(
     val postThreads: Int=0,
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
-    val compact: Boolean=true,
+    val compact: Boolean=false,
     val earlyMatTable: Boolean=false,
     val earlyMat: Boolean=true,
     val buildPartitioned: Boolean=false,
@@ -286,9 +286,11 @@ class TpchQ19AutoPart(
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
+        .asIncomplete
 
     join = join
         .filter(postCond)
+        .asIncomplete
         .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
         .aggregate(('price, PlusOp))
         .nestedSumDouble('price)
