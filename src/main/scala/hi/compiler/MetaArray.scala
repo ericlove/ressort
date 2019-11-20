@@ -1428,7 +1428,7 @@ case class ChunkArray(
     s"ChunkArray can't be disjoint and also use inline counters")
 
   override def withPadding(padding: Expr): NestedArray = {
-    ???
+    this
 //    SlicedArray(
 //      base = base.clone(MetaArray.tempIds.newId("buf")),
 //      slices = buckets,
