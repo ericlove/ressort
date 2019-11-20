@@ -288,6 +288,7 @@ private class OperatorTypeCheck(o: Operator, externalEnv: Map[Id, HiType]) {
         val hist = c.hist.map(_ => inputTypes(1))
         hist.map(getHistogram(_, None))
         cont match {
+          case n: NestedData if n.depth > 1 => error(s"Can't currently compact deeply-nested arrays")
           case n: NestedData =>
             // TODO: actually should have histogram at _every_ level inside `n`
             n.withCleanArrays.withInnermost(Arr(n.subArr, histogram=(hist)))
