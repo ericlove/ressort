@@ -57,7 +57,7 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
     Func(
       Map(
         'lineitem -> TpchSchema.lineitem),
-      Vec(outRec, numValid=true))
+      Vec(outRec, numValid=false))
   }
 
 
@@ -73,7 +73,7 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
 
     m = m
       .filter('l_shipdate <= maxShipdate)
-      .copy(isComplete = false)
+      .asIncomplete
       .rename()
       .rename(
         'disc_price -> 'l_extendedprice.toLoDouble * (DoubleConst(1.0) - 'l_discount.toLoDouble))
@@ -202,8 +202,8 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
         Block(
           (for (field <- correct.keys) yield {
             (corr := (LoFloat(), Cast(Escape('i, Index(), fieldTypes(field).loType, v => EFloat(correct(field)(v.toEInt(None).i.toInt))), LoFloat()))) +
-                (err := rec.dot(field) - corr) +
-                If((err * err)/(corr*corr) > FloatConst(0.001.toFloat),
+                (err := Mux(rec.dot(field) > corr, rec.dot(field) - corr, corr - rec.dot(field))) +
+                If((err )/(corr) > FloatConst(0.001.toFloat),
                   Printf(s"$field was %f; should be %f", Cast(rec.dot(field), LoFloat()), corr) +
                       (flag := False)
                 )
