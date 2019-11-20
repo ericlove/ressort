@@ -57,7 +57,7 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
     Func(
       Map(
         'lineitem -> TpchSchema.lineitem),
-      Vec(outRec))
+      Vec(outRec, numValid=true))
   }
 
 
@@ -72,14 +72,18 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
     var m: MetaOp = litem
 
     m = m
-      .filter('l_shipdate < maxShipdate)
+      .filter('l_shipdate <= maxShipdate)
+      .copy(isComplete = false)
+      .rename()
       .rename(
-        'disc_price -> 'l_extendedprice * (FloatConst(1.0.toFloat) - 'l_discount))
+        'disc_price -> 'l_extendedprice.toLoDouble * (DoubleConst(1.0) - 'l_discount.toLoDouble))
         .copy(keepInput = true)
       .rename(
-        'charge -> (('l_tax + 1.0.toFloat) * 'disc_price))
+        'charge -> (('l_tax.toLoDouble + 1.0.toDouble) * 'disc_price.toLoDouble))
         .copy(keepInput = true)
       .rename(
+        'l_returnflag -> 'l_returnflag,
+        'l_linestatus -> 'l_linestatus,
         'count -> Const(1).toLoInt,
         'sum_qty -> 'l_quantity,
         'sum_base_price -> 'l_extendedprice,
@@ -96,11 +100,18 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
           'sum_disc -> PlusOp,
           'count_order -> PlusOp)
       .rename(
-        'avg_qty -> 'sum_qty.toLoFloat / 'count_order.toLoFloat,
-        'avg_price -> 'sum_price.toLoFloat / 'count_order.toLoFloat,
-        'avg_disc -> 'sum_disc.toLoFloat / 'count_order.toLoFloat)
-      .copy(keepInput = true)
-      .rename()
+        'l_returnflag -> 'l_returnflag,
+        'l_linestatus -> 'l_linestatus,
+        'sum_qty -> 'sum_qty,
+        'sum_base_price -> 'sum_base_price.toLoFloat,
+        'sum_disc_price -> 'sum_disc_price.toLoFloat,
+        'sum_charge -> 'sum_charge.toLoFloat,
+        'avg_qty -> ('sum_qty.toLoDouble / 'count_order).toLoFloat,
+        'avg_price -> ('sum_base_price / 'count_order).toLoFloat,
+        'avg_disc -> ('sum_disc / 'count_order).toLoFloat,
+        'count_order -> 'count_order)
+      .flatten
+      .connector((o: Operator) => InsertionSort(o, List('l_returnflag, 'l_linestatus)))
     m
   }
 
@@ -118,12 +129,12 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
       import ressort.lo.interp.EFloat
 
       val sum_qty = HashMap[(Int, Int), Int]()
-      val sum_base_price = HashMap[(Int, Int), Float]()
-      val sum_disc_price = HashMap[(Int, Int), Float]()
-      val sum_charge = HashMap[(Int, Int), Float]()
-      val avg_qty = HashMap[(Int, Int), Float]()
-      val avg_price = HashMap[(Int, Int), Float]()
-      val avg_disc = HashMap[(Int, Int), Float]()
+      val sum_base_price = HashMap[(Int, Int), Double]()
+      val sum_disc_price = HashMap[(Int, Int), Double]()
+      val sum_charge = HashMap[(Int, Int), Double]()
+      val avg_qty = HashMap[(Int, Int), Double]()
+      val avg_price = HashMap[(Int, Int), Double]()
+      val avg_disc = HashMap[(Int, Int), Double]()
       var count = HashMap[(Int, Int), Int]()
 
       for (i <- 0 until tpch.litemSize) {
@@ -135,19 +146,19 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
             hmap(pair) = implicitly[Numeric[T]].plus(init, n)
           }
           add(sum_qty, tpch.l_quantity(i))
-          add(sum_base_price, tpch.l_extendedprice(i))
-          add(sum_disc_price, tpch.l_extendedprice(i) * (1.0.toFloat - tpch.l_discount(i)))
-          add(sum_charge, tpch.l_extendedprice(i) * (1.0.toFloat - tpch.l_discount(i)) * (1.0.toFloat + tpch.l_tax(i)))
-          add(avg_qty, tpch.l_quantity(i).toFloat)
-          add(avg_price, tpch.l_extendedprice(i))
-          add(avg_disc, tpch.l_discount(i))
+          add(sum_base_price, tpch.l_extendedprice(i).toDouble)
+          add(sum_disc_price, tpch.l_extendedprice(i).toDouble * (1.0.toDouble - tpch.l_discount(i)))
+          add(sum_charge, tpch.l_extendedprice(i) * (1.0.toDouble - tpch.l_discount(i)) * (1.0.toDouble + tpch.l_tax(i)))
+          add(avg_qty, tpch.l_quantity(i).toDouble)
+          add(avg_price, tpch.l_extendedprice(i).toDouble)
+          add(avg_disc, tpch.l_discount(i).toDouble)
           add(count, 1)
         }
       }
 
-      def avg(hmap: HashMap[(Int, Int), Float]): Unit = {
+      def avg(hmap: HashMap[(Int, Int), Double]): Unit = {
         for ((pair, v) <- hmap) {
-          hmap(pair) = v / count(pair).toFloat
+          hmap(pair) = v / count(pair).toDouble
         }
       }
       avg(avg_qty)
@@ -168,12 +179,12 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
         correct('l_returnflag)(i) = rflag
         correct('l_linestatus)(i) = lstat
         correct('sum_qty)(i) = sum_qty(p)
-        correct('sum_base_price)(i) = sum_base_price(p)
-        correct('sum_disc_price)(i) = sum_disc_price(p)
-        correct('sum_charge)(i) = sum_charge(p)
-        correct('avg_qty)(i) = avg_qty(p)
-        correct('avg_price)(i) = avg_price(p)
-        correct('avg_disc)(i) = avg_disc(p)
+        correct('sum_base_price)(i) = sum_base_price(p).toFloat
+        correct('sum_disc_price)(i) = sum_disc_price(p).toFloat
+        correct('sum_charge)(i) = sum_charge(p).toFloat
+        correct('avg_qty)(i) = avg_qty(p).toFloat
+        correct('avg_price)(i) = avg_price(p).toFloat
+        correct('avg_disc)(i) = avg_disc(p).toFloat
         correct('count_order)(i) = count(p)
         val fields = List(rflag, lstat, sum_qty(p), sum_base_price(p), sum_disc_price(p), sum_charge(p), avg_qty(p), avg_price(p), avg_disc(p), count(p))
         println(format.format(fields.map(_.toString.take(col)):_*))
@@ -192,7 +203,7 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
           (for (field <- correct.keys) yield {
             (corr := (LoFloat(), Cast(Escape('i, Index(), fieldTypes(field).loType, v => EFloat(correct(field)(v.toEInt(None).i.toInt))), LoFloat()))) +
                 (err := rec.dot(field) - corr) +
-                If((err * err) > FloatConst(0.001.toFloat),
+                If((err * err)/(corr*corr) > FloatConst(0.001.toFloat),
                   Printf(s"$field was %f; should be %f", Cast(rec.dot(field), LoFloat()), corr) +
                       (flag := False)
                 )
