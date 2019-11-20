@@ -81,11 +81,15 @@ sealed trait MetaOp {
 
   def concrete(implicit p: Program): MetaOp
 
+  /** Indicates that this operator removes or replaces masks, chunks, and other discontinuities */
+  def completes: Boolean = false
+
   def rename(renames: (Id, Expr)*): Rename = Rename(this, renames)
   def addFields(fields: (Id, Expr)*): Rename = Rename(this, fields, keepInput=true)
   def equiJoin(right: MetaOp, lkey: Id, rkey: Id): EquiJoin = EquiJoin(this, right, lkey, rkey)
   def filter(conds: Expr*): Filter = Filter(this, conds.toSeq)
   def aggregate(aggregates: (Id, CommutativeOp)*): Aggregate = Aggregate(this, aggregates.toList)
+  def groupBy(fields: Id*): Aggregate = Aggregate(this, aggregates=Nil, groupBy=fields)
   def partition(key: Id, renamed: Option[MetaOp=>MetaOp]=None): HashPartition = {
     HashPartition(this, key, renamed = renamed.map(f => f(this)))
   }
@@ -110,8 +114,6 @@ sealed trait MetaOp {
   def connector(f: Operator=>Operator): Connector = Connector(this, f)
   def compact: CompactMeta = CompactMeta(this)
 
-  def complete(implicit p: Program): Operator = concrete(p).name.get
-
   def asOperator(connector: Option[Operator=>Operator]=None): Operator = {
     connector match {
       case Some(f) => f(name.get)
@@ -128,7 +130,7 @@ sealed trait MetaOp {
     val metaOps = this.all.map(_.pruneFields)
     for (o <- metaOps) yield {
       val p = new Program()
-      p(o.complete(p))
+      p(o.concrete(p).name.get)
     }
   }
 
@@ -142,6 +144,7 @@ sealed trait MetaOp {
       def walk(o: MetaOp, inUse: Set[Id]): Unit = {
         fmap(o.id) = fmap.getOrElse(o.id, Set()) ++ inUse.filter(o.fields.contains)
         val nextFields = o match {
+          case r: Rename if r.keepInput => r.usedFields ++ r.in.fields.filter(inUse.contains(_))
           case r: Rename => r.usedFields
           case _ => o.usedFields ++ inUse
         }
@@ -166,6 +169,19 @@ sealed trait MetaOp {
 
     replace(this)
   }
+}
+
+/** A [[MetaOp]] that requires compaction or reduction
+  *
+  * Some operations, like filtering, joins, and aggregation, produce by default results
+  * that have invalid elements interspersed, or discontinuities of layout, which must be
+  * resolved only if no "completing" operation intervenes: i.e. one that inherently
+  * resolves such gaps by reduction or record movement.
+  */
+sealed trait NeedsCompletion { this: MetaOp =>
+  def isComplete: Boolean
+  def asComplete: MetaOp
+  def asIncomplete: MetaOp
 }
 
 object MetaOp {
@@ -351,6 +367,8 @@ case class HashPartition(
     }
   }
 
+  override def completes: Boolean = true
+
   def concrete(implicit p: Program) = {
     val in = p.fresh("in")
     val hist = p.fresh("hist")
@@ -425,9 +443,10 @@ case class EquiJoin(
     lkey: Id,
     rkey: Id,
     config: EquiJoin.Config=EquiJoin.Config(),
+    isComplete: Boolean=true,
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
-  extends MetaOp {
+  extends MetaOp with NeedsCompletion {
   lazy val fields: Set[Id] = left.fields ++ right.fields
 
   def inputs: Seq[MetaOp] = Seq(left, right)
@@ -435,6 +454,11 @@ case class EquiJoin(
   def withInputs(inputs: Seq[MetaOp]): EquiJoin = copy(left = inputs(0), right = inputs(1))
 
   override def usedFields: Set[Id] = Set(lkey, rkey)
+
+  def asComplete: EquiJoin = copy(isComplete = true)
+  def asIncomplete: EquiJoin = copy(isComplete = false)
+
+  override def completes: Boolean = true
 
   def build(right: ProgSym)(implicit p: Program): Operator = {
     val parallel = config.threads > 1
@@ -489,6 +513,7 @@ case class EquiJoin(
     val table = p.fresh("htbl")
     val hash = p.fresh("hash")
     val join = p.fresh("join")
+    val off = p.fresh("off")
 
     right := this.right
     left := this.left
@@ -505,6 +530,10 @@ case class EquiJoin(
     }
     hash := config.hash(left(lkey))
     join := HashJoin(left, table, hash, test = Some(Equal(lkey, rkey)))
+    if (isComplete) {
+      off := Offsets(join)
+      join := Compact(join, hist=Some(off))
+    }
     copy(left = newLeft, right = newRight, name = Some(join))
   }
 
@@ -523,14 +552,6 @@ case class EquiJoin(
     } else {
       base
     }
-  }
-
-  override def complete(implicit p: Program) = {
-    val jsym = p.fresh(s"_${name}_join")
-    val off = p.fresh(s"_${name}_off")
-    jsym := concrete(p)
-    off := Offsets(jsym)
-    Compact(jsym, off)
   }
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
@@ -605,6 +626,7 @@ case class Rename(
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
+
   lazy val fields: Set[Id] = {
     var f = Set[Id]()
     if (keepInput) f ++= in.fields ++ renames.map(_._1).toSet
@@ -622,21 +644,23 @@ case class Rename(
   }
 
   def concrete(implicit p: Program): MetaOp = {
+    val in = p.fresh("in")
+    val ren = p.fresh("ren")
+    in := this.in
+    ren := hiRes(in)
+    copy(in = in.metaOp.get, name = Some(ren))
+  }
+
+  private def hiRes(in: Operator)(implicit p: Program): Operator = {
+    var assigns = List[Assign]()
     var renames = Seq[(Id, Expr)]()
     if (this.renames.isEmpty || keepInput)
       renames = this.in.fields.map(f => f->f).toSeq
     renames ++= this.renames
-
-    var assigns = List[Assign]()
-    val in = p.fresh("in")
-    val ren = p.fresh("ren")
-    in := this.in
-
     for ((i, e) <- renames) {
       assigns ::= (i := in(e))
     }
-    ren := Let(assigns.reverse, in = Project(renames.map(p => IdOp(p._1)):_*))
-    copy(in = in.metaOp.get, name = Some(ren))
+    Let(assigns.reverse, in = Project(renames.map(p => IdOp(p._1)):_*))
   }
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
@@ -649,8 +673,9 @@ case class Filter(
     conds: Seq[Expr],
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId(),
+    isComplete: Boolean=true,
     config: Filter.Config=Filter.Config())
-  extends MetaOp {
+  extends MetaOp with NeedsCompletion {
 
   def inputs: Seq[MetaOp] = Seq(in)
 
@@ -659,6 +684,9 @@ case class Filter(
   def fields = in.fields
 
   override def usedFields: Set[Id] = conds.flatMap(_.ids).toSet
+
+  def asComplete: Filter = copy(isComplete = true)
+  def asIncomplete: Filter = copy(isComplete = false)
 
   def concrete(implicit p: Program) = {
     val in = p.fresh("in")
@@ -686,10 +714,10 @@ case class Filter(
         fil := Mask(in, in(conds.reduceLeft(And(_,_))))
       }
     }
+    if (isComplete)
+      fil := Collect(fil)
     copy(name = Some(fil), in = in.metaOp.get)
   }
-
-  override def complete(implicit p: Program) = Compact(concrete(p).name.get)
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
     val in = generator(this.in)
@@ -721,10 +749,9 @@ case class Aggregate(
     aggregates: Seq[(Id, CommutativeOp)],
     groupBy: Seq[Id]=Nil,
     name: Option[ProgSym]=None,
+    isComplete: Boolean=true,
     id: MetaOpId=new MetaOpId())
-  extends MetaOp {
-
-  if (groupBy.nonEmpty) ???
+  extends MetaOp with NeedsCompletion {
 
   def inputs: Seq[MetaOp] = Seq(in)
 
@@ -734,7 +761,41 @@ case class Aggregate(
 
   override lazy val usedFields = fields.toSet ++ groupBy.toSet
 
-  def concrete(implicit p: Program) = {
+  def asComplete: Aggregate = copy(isComplete = true)
+  def asIncomplete: Aggregate = copy(isComplete = false)
+
+  override def completes: Boolean = true
+
+
+  def withAggregates(aggregates: (Id, CommutativeOp)*): Aggregate = {
+    copy(aggregates = aggregates)
+  }
+
+  def concrete(implicit p: Program): Aggregate = {
+    if (groupBy.nonEmpty) {
+      concreteGroupBy(p)
+    } else {
+      concreteNoGroupBy(p)
+    }
+  }
+
+  private def concreteGroupBy(implicit p: Program) = {
+    val in = p.fresh("in")
+    val agg = p.fresh("agg")
+    in := this.in
+
+    agg := HashTable(
+      in,
+      aggregates.map(a => NFieldName(a._1) -> a._2).toList)
+    if (isComplete) {
+      val off = p.fresh("off")
+      off := Offsets(agg)
+      agg := Compact(agg, hist=Some(off))
+    }
+    copy(in = in.metaOp.get, name = Some(agg))
+  }
+
+  private def concreteNoGroupBy(implicit p: Program) = {
     val in = p.fresh("in")
     val agg = p.fresh("agg")
     in := this.in
@@ -750,9 +811,9 @@ case class Aggregate(
     agg := Let(
       aggs.toList,
       in = Project(aggs.map(_.id).map(IdOp):_*))
+
     copy(in = in.metaOp.get, name = Some(agg))
   }
-
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
     Seq(copy(in = generator(in)))
@@ -771,6 +832,8 @@ case class CompactMeta(
   def inputs: Seq[MetaOp] = Seq(in)
 
   def withInputs(inputs: Seq[MetaOp]): CompactMeta = copy(in = inputs(0))
+
+  override def completes: Boolean = true
 
   def concrete(implicit p: Program) = {
     val in = p.fresh("in")

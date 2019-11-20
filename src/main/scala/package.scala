@@ -88,6 +88,8 @@ package object hi {
   }
 
   implicit def aggFieldFromSym(p: (Symbol, CommutativeOp)): (FieldName, CommutativeOp) = (NFieldName(p._1), p._2)
+  implicit def aggFieldFromId(p: (Id, CommutativeOp)): (FieldName, CommutativeOp) = (NFieldName(p._1), p._2)
+  implicit def idPairFromId(p: (Symbol, CommutativeOp)): (Id, CommutativeOp) = (Id(p._1.name), p._2)
   implicit def symbolToFieldName(s: Symbol): FieldName = NFieldName(s)
   implicit def idToFieldName(i: Id): NFieldName = NFieldName(i)
   implicit def intToFieldName(i: Int): UFieldName = UFieldName(i)
