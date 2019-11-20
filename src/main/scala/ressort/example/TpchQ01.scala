@@ -65,50 +65,49 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
 
   val allFields = outRec.fields.map(f => Id(f.name.get.name))
 
+  val meta = {
+    import ressort.hi.meta._
+    import ressort.hi.meta.MetaParam._
+    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+    var m: MetaOp = litem
+
+    m = m
+      .filter('l_shipdate < maxShipdate)
+      .rename(
+        'disc_price -> 'l_extendedprice * (FloatConst(1.0.toFloat) - 'l_discount))
+        .copy(keepInput = true)
+      .rename(
+        'charge -> (('l_tax + 1.0.toFloat) * 'disc_price))
+        .copy(keepInput = true)
+      .rename(
+        'count -> Const(1).toLoInt,
+        'sum_qty -> 'l_quantity,
+        'sum_base_price -> 'l_extendedprice,
+        'sum_disc_price -> 'disc_price,
+        'sum_charge -> 'charge,
+        'sum_disc -> 'l_discount,
+        'count_order -> Cast(Const(1), lo.UInt32()))
+      .groupBy('l_returnflag, 'l_linestatus)
+        .withAggregates(
+          'sum_qty -> PlusOp,
+          'sum_base_price -> PlusOp,
+          'sum_disc_price -> PlusOp,
+          'sum_charge -> PlusOp,
+          'sum_disc -> PlusOp,
+          'count_order -> PlusOp)
+      .rename(
+        'avg_qty -> 'sum_qty.toLoFloat / 'count_order.toLoFloat,
+        'avg_price -> 'sum_price.toLoFloat / 'count_order.toLoFloat,
+        'avg_disc -> 'sum_disc.toLoFloat / 'count_order.toLoFloat)
+      .copy(keepInput = true)
+      .rename()
+    m
+  }
+
+
+
   val hiRes = {
-    Let(
-      List(
-        'l := 'lineitem,
-        'l := Mask('l, 'l('l_shipdate <= maxShipdate)),
-        'disc_price :=
-            'l('l_extendedprice * (FloatConst(1.0.toFloat) - 'l_discount)),
-        'charge :=
-            Zip('l, 'disc_price)(('l_tax + 1.0.toFloat) * 'disc_price),
-        'count := 'l(Const(1).toLoInt),
-        'l := Zip('l, 'disc_price, 'charge, 'count),
-        'h0 :=
-            HashTable(
-              'l.project(
-                'l_returnflag -> 'l_returnflag,
-                'l_linestatus -> 'l_linestatus,
-                'sum_qty -> 'l_quantity,
-                'sum_base_price -> 'l_extendedprice,
-                'sum_disc_price -> 'disc_price,
-                'sum_charge -> 'charge,
-                'sum_disc -> 'l_discount,
-                'count_order -> Cast(Const(1), lo.UInt32())
-              ),
-              aggregates = List(
-                'sum_qty -> PlusOp,
-                'sum_base_price -> PlusOp,
-                'sum_disc_price -> PlusOp,
-                'sum_charge -> PlusOp,
-                'sum_disc -> PlusOp,
-                'count_order -> PlusOp)),
-        'hist := Offsets('h0),
-        'h1 := Compact('h0, hist = Some('hist)),
-        'h :=
-            Let(
-              List(
-                'avg_qty := 'h1('sum_qty.toLoFloat / 'count_order.toLoFloat),
-                'avg_price := 'h1('sum_base_price / 'count_order.toLoFloat),
-                'avg_disc := 'h1('sum_disc.toLoFloat / 'count_order.toLoFloat)
-              ),
-              in = Project('h1, 'avg_qty, 'avg_price, 'avg_disc)
-            ),
-        'h := 'h.project(allFields.map(f => f->f):_*)
-      ),
-      in = InsertionSort(Flatten('h), keys = NFieldName('l_returnflag) :: NFieldName('l_linestatus) :: Nil))
+    meta.allOps.head
   }
 
   override val check: Option[lo.LoAst] = {
