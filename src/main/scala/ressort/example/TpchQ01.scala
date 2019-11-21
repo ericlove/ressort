@@ -70,8 +70,10 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
     import ressort.hi.meta.MetaParam._
     val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
     var m: MetaOp = litem
+    val threads = 1
 
     m = m
+      .splitPar(threads)
       .filter('l_shipdate <= maxShipdate)
       .asIncomplete
       .rename()
@@ -99,6 +101,20 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
           'sum_charge -> PlusOp,
           'sum_disc -> PlusOp,
           'count_order -> PlusOp)
+
+    if (threads > 1) {
+      m = m
+      .groupBy('l_returnflag, 'l_linestatus)
+      .withAggregates(
+        'sum_qty -> PlusOp,
+        'sum_base_price -> PlusOp,
+        'sum_disc_price -> PlusOp,
+        'sum_charge -> PlusOp,
+        'sum_disc -> PlusOp,
+        'count_order -> PlusOp)
+    }
+
+    m = m
       .rename(
         'l_returnflag -> 'l_returnflag,
         'l_linestatus -> 'l_linestatus,
