@@ -34,6 +34,7 @@ private class PropagateConstants(typed: TypedLoAst, replaceInsidePhi: Boolean) {
       case Plus(Plus(e1, c1: ConstExpr), c2: ConstExpr) => Plus(e1, c2 + c1)
       case Plus(Minus(e1, c1: ConstExpr), c2: ConstExpr) => Plus(e1, c2 - c1)
       case Minus(Plus(e1, c1: ConstExpr), c2: ConstExpr) => Plus(e1, c1 - c2)
+      case Plus(e1, Neg(e2)) if e1 == e2 => Const(0)
 
       case Plus(Minus(e1, e2), e3) if (e3 == e2) => e1
       case Minus(Plus(e1, e2), e3) if (e3 == e2) => e1

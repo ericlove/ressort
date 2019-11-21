@@ -243,6 +243,17 @@ object MetaOp {
 }
 
 
+/** Chooses a hash function for [[EquiJoin]]s 
+  *
+  * @param msb The highest bit from which to extract key or hash values
+  * @param bits The number of bits (including `msb`) to extract
+  *
+  * There are two special cases:
+  * -- When `width` and `bits` are both zero (or `Const(0)`), there is one bucket
+  *     (as used in nested-loops join)
+  * -- When `width` is 0, __no__ hashing is performed, and the indicated bits are
+  *     extracted directly from the key (as in an __array join__).
+  */
 case class HashConfig(
     width: MetaParam[Int] = 64,
     bits: MetaParam[Expr] = Const(10),
@@ -258,10 +269,14 @@ case class HashConfig(
   }
 
   def apply(o: Operator)(implicit p: Program): Operator = {
-    if (width > 0) 
-      Hash64(o, width)(BitRange(UField(0), msb, msb-bits+1))
-    else
-      o(Const(0))
+    val width: Int = this.width
+    val bits: Expr = this.bits
+    val extract: Expr = BitRange(UField(0), msb, msb-bits+1)
+    (width, bits) match {
+      case (0, Const(0)) => o(Const(0))
+      case (0, _) => o(extract)
+      case _ => Hash64(o, width)(extract)
+    }
   }
 }
 

@@ -112,14 +112,15 @@ case class TpchQ19Simple(tpch: Option[TpchSchema.Generator]) extends TpchQ19(tpc
 case class TpchQ19AutoNopa(
     tpch: Option[TpchSchema.Generator],
     threads: Int=4,
-    extraHashBits: Option[Int]=Some(-3),
-    slots: Expr = Const(4),
-    buildPartitioned: Boolean=true,
+    extraHashBits: Option[Int]=None,
+    slots: Expr = Const(2),
+    buildPartitioned: Boolean=false,
     blockBuild: Boolean=false,
     earlyMat: Boolean=true,
-    inline: Boolean=true,
-    compact: Boolean=false
-    ) extends TpchQ19(tpch) with Q19Auto {
+    inline: Boolean=false,
+    compact: Boolean=false,
+    array: Boolean=true
+  ) extends TpchQ19(tpch) with Q19Auto {
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
   override val name = {
@@ -131,12 +132,18 @@ case class TpchQ19AutoNopa(
     val blockBuildStr = if (blockBuild) "_blockBuild" else ""
     val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
     val inlineStr = if (inline) "_inline" else ""
-    s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr"
+    val arrayStr = if (array) "_array" else ""
+    s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr$arrayStr"
   }
 
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(tpch.get.partSize))) //Length('part))))
   val joinBits = new ExprParam(totalBits, e => e + Const(extraHashBits.getOrElse(0)))
-  val joinHash = HashConfig(bits = joinBits)
+  val msb = new ExprParam(totalBits, e => e - Const(1))
+  val joinHash = HashConfig(
+    bits = joinBits, 
+    width = (if (array) 0 else 64),
+    msb = (if (array) msb else Const(64))
+  )
 
   val meta = {
     var table: MetaOp = part
@@ -152,6 +159,8 @@ case class TpchQ19AutoNopa(
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+      .asIncomplete
+      .rename()
       .equiJoin(table, 'l_partkey,'p_partkey)
         .withHash(joinHash)
         .withCompactTable(compact)
@@ -161,9 +170,10 @@ case class TpchQ19AutoNopa(
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, threads=threads)
+        .asIncomplete
 
     join
-      .filter(postCond)
+      .filter(postCond).asIncomplete
       .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
       .aggregate(('price, PlusOp))
       .rename('price -> Cast('price, lo.LoFloat()))
