@@ -824,6 +824,7 @@ case class Aggregate(
 case class CompactMeta(
     in: MetaOp,
     name: Option[ProgSym]=None,
+    depth: Int=0,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
 
@@ -841,7 +842,7 @@ case class CompactMeta(
     val comp = p.fresh("comp")
 
     in := this.in
-    hist := Offsets(in)
+    hist := Offsets(in, depth=depth)
     comp := Compact(in, hist=Some(hist))
     copy(in = in.metaOp.get, name = Some(comp))
   }
