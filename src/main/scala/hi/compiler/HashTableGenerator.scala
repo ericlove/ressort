@@ -101,11 +101,11 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
       ForBlock(i, output.maxCursor,
         If(
             Not(found) && 
-            output.accessMask(i).get && 
+            output.readMask(i).get && 
             compareFields(inRec, output.access(i)),
           (found := True) + aggregate) +
-        If(Not(found) && Not(output.accessMask(i).get),
-          (found := True) + (output.access(i) := inRec) + (output.accessMask(i).get := True)))
+        If(Not(found) && Not(output.readMask(i).get),
+          (found := True) + (output.access(i) := inRec) + (output.setMask(i, True))))
 
     if (op.overflow) {
       chunk.base.globalState +

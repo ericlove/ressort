@@ -305,6 +305,8 @@ class LoInterp(val parent: Option[LoInterp] = None) {
       case (f: EFloat, iv: IntValued) => EInt(f.f.toLong, widthBytes=iv.minBytes, signed=iv.signed)
       case (f: EFloat, ld: LoDouble) => EDouble(f.f.toDouble)
       case (f: EFloat, lf: LoFloat) => f
+      case (n: ENumber, b: Bool) => EBool(!n.isZero)
+      case (e: EBool, b: Bool) => e
       case _ => ???
     }
   }
@@ -687,6 +689,7 @@ class LoInterp(val parent: Option[LoInterp] = None) {
         }
       }
       case Safe(e1) => evalBool(et.children.head).b
+      case Cast(e, loType) => cast(evalInner(et.children.head), loType).toEBool(et.lines).b
       case _ => throw InterpError(s"${et.expr} is not a boolean expression", et.lines)
     }
     EBool(boolRes)

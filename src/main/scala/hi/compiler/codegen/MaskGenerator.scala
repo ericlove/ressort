@@ -19,7 +19,7 @@ case class MaskGenerator(
       case Some(m) => m && cond.currentRec
       case None => cond.currentRec
     }
-    output.currentMask.get := outExpr
+    output.setMask(outExpr)
 
   }
 }

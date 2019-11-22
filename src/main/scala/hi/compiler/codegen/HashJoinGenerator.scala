@@ -84,7 +84,7 @@ case class HashJoinGenerator(elaboration: Elaboration) extends CodeGenerator {
 
 
       val probeLoop = {
-        If(right.accessMask(i).getOrElse(True),
+        If(right.readMask(i).getOrElse(True),
           DecAssign(rightRec, rightType, right.access(i)) +
           Dec(testRec, outType) +
           assignFields(testRec, leftRec, leftType) +

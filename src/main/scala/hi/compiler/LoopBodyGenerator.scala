@@ -337,7 +337,7 @@ class LoopBodyGenerator(elaboration: Elaboration, node: LoDag) {
   }
 
   private def mask(leader: ArrayView, body: lo.LoAst): lo.LoAst = {
-    leader.accessMask(cursor) match {
+    leader.readMask(cursor) match {
       case Some(m) => lo.If(m, body)
       case None => body
     }

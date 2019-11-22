@@ -79,7 +79,7 @@ trait HistogramOperatorInstance {
     val pexpr = keys.access(cursor)
     val hsr = HistStreamRecord(part, cursor, value)
     val update = DecAssign(part, Index(const=true), pexpr) + process(hsr)
-    keys.accessMask(hsr.index) match {
+    keys.readMask(hsr.index) match {
       case Some(m) => If(m, update)
       case None => update
     }

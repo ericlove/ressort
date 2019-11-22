@@ -30,8 +30,8 @@ case class ReduceGenerator(
       case hi.AndOp => acc && next
       case hi.OrOp => acc || next
     }
-    val setMask = (output.currentMask.map(_ := True)).getOrElse(Nop)
-    val initMask = (output.currentMask.map(_ := False)).getOrElse(Nop)
+    val setMask = output.setMask(True)
+    val initMask = output.setMask(False)
     val finalizer = if (nested) Nop else (output.currentRec := accVar)
     op.init match {
       case Some(i) => {

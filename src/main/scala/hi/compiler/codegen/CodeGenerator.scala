@@ -13,7 +13,7 @@ sealed abstract class GeneratorIO(private val view: ArrayView) {
 class IndexableIO(view: ArrayView) extends GeneratorIO(view) {
   def index(i: Expr): LValue = view.access(i)
 
-  def indexMask(i: Expr): Option[LValue] = view.accessMask(i)
+  def indexMask(i: Expr): Option[Expr] = view.readMask(i)
 }
 
 /** This represents a strictly one-to-one relationship between the operator's
@@ -22,18 +22,20 @@ class IndexableIO(view: ArrayView) extends GeneratorIO(view) {
 class RecParallelIO(view: ArrayView, index: Expr) extends GeneratorIO(view) {
   def currentRec: LValue = view.access(index)
 
-  def currentMask: Option[LValue] = view.accessMask(index)
+  def currentMask: Option[Expr] = view.readMask(index)
+
+  def setMask(value: Expr): LoAst = view.setMask(index, value)
 
   def firstRec: LValue = view.access(Const(0))
 
-  def zeroMask: Option[LValue] = view.accessMask(Const(0))
+  def zeroMask: Option[Expr] = view.readMask(Const(0))
 }
 
 /** A accessor whose cursor is advanced by the operator */
 class StreamingIO(view: ArrayView, index: LValue) extends GeneratorIO(view) {
   def currentRec: LValue = view.access(index)
 
-  def currentMask: Option[LValue] = view.accessMask(index)
+  def currentMask: Option[Expr] = view.readMask(index)
 
   def advanceRec: LoAst = (index := index + Const(1))
 }

@@ -103,11 +103,17 @@ trait ArrayView {
     */
   def accessExpr(n: Expr): Expr = access(n)
 
-  /** Returns an optional [[LValue]] for the `n`th element of the current mask's vector slice */
-  def accessMask(n: Expr): Option[LValue]
+  /** Returns an optional [[Expr]] for the `n`th element of the current mask's vector slice */
+  def readMask(n: Expr): Option[Expr]
 
-  /** Returns an optional [[LValue]] for the `n`th element of the mask at the bottom o fthis array */
-  def absoluteMask(n: Expr): Option[LValue]
+  /** Returns an optional [[LValue]] for the `n`th element of the mask at the bottom of this array */
+  def readMaskAbsolute(n: Expr): Option[Expr]
+
+  /** Reutrns code to set the `n`th element of the current mask's vector slice */
+  def setMask(n: Expr, value: Expr): LoAst
+
+  /** Returns code to set the `n`th element of the mask at the bottom of this array */
+  def setMaskAbsolute(n: Expr, value: Expr): LoAst
 
   /** Returns an optional lvalue for the number of valid elements at the start of the current vector */
   def accessNumValid: Option[LValue]
@@ -328,11 +334,15 @@ abstract class StatefulNestedView(state: NestedViewState) extends NestedView wit
 
   def access(n: Expr) = base.absolute(state.offset + n)
 
-  def accessMask(n: Expr) = base.absoluteMask(state.offset + n)
+  def readMask(n: Expr) = base.readMaskAbsolute(state.offset + n)
+
+  def setMask(n: Expr, value: Expr) = base.setMaskAbsolute(state.offset + n, value)
 
   def absolute(n: Expr) = base.absolute(n)
 
-  def absoluteMask(n: Expr) = base.absoluteMask(n)
+  def readMaskAbsolute(n: Expr) = base.readMaskAbsolute(state.offset + n)
+
+  def setMaskAbsolute(n: Expr, value: Expr) = base.setMaskAbsolute(state.offset + n, value)
 
   def physVecLen = state.physVecLen
 
@@ -355,8 +365,10 @@ abstract class WrapperView(val orig: ArrayView) extends ArrayView {
   def globalState = orig.globalState
   def access(n: Expr): LValue = ???
   def absolute(n: Expr): LValue = orig.absolute(n)
-  def accessMask(n: Expr): Option[LValue] = orig.accessMask(n)
-  def absoluteMask(n: Expr): Option[LValue] = orig.absoluteMask(n)
+  def readMask(n: Expr) = orig.readMask(n)
+  def setMask(n: Expr, value: Expr) = orig.setMask(n, value)
+  def readMaskAbsolute(n: Expr) = orig.readMaskAbsolute(n)
+  def setMaskAbsolute(n: Expr, value: Expr) = orig.setMaskAbsolute(n, value)
   def accessNumValid: Option[LValue] = orig.accessNumValid
   def ancillaries: List[ArrayView] = orig.ancillaries
   def physVecLen: Expr = orig.logVecLen
