@@ -537,6 +537,8 @@ case class RestoreHistogram(
   *                       its first field will be used as a counter of the number of
   *                       filled slots in the first chunk, until it is full, at which
   *                       point separate counter and pointer arrays will be allocated.
+  * @param overflow If set to false, each bucket is assumed be large enough to hold all records
+  *                 that may map to it.
   */
 case class HashTable(
     o: Operator,
@@ -544,6 +546,7 @@ case class HashTable(
     hash: Option[Operator] = None,
     buckets: Option[Expr] = None,
     slots: Option[Expr] = None,
+    overflow: Boolean = true,
     inlineCounter: Boolean = false)
   extends Operator(
       "HashTable",

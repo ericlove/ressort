@@ -11,12 +11,14 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
   def emit(
       input: RecParallelIO,
       hash: Option[RecParallelIO],
-      output: ChunkArray.ChunkView,
+      output: ArrayView with ParallelMacroView,
       op: hi.HashTable): LoAst = {
 
     val recType = input.recType
     val aggFields = op.aggregates.map(_._1)
     val keyFields = HashTableGenerator.keyFields(op, recType)
+
+    lazy val chunk = output.asInstanceOf[ChunkArray.ChunkView]
 
     val bucket = elaboration.tempIds.newId("bkt")
     val setBucket = hash match {
@@ -24,7 +26,7 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
       case None => {
         val gen = new Hash64Generator(elaboration)
         val hashSym = elaboration.tempIds.newId("hash")
-        val buckets = output.base.numArrays
+        val buckets = if (op.overflow) chunk.base.numArrays else output.numArrays
         gen.multHash(input.currentRec, keyFields.map(_._1), Log2Up(buckets-1), hashSym) +
             (bucket := (Index(), hashSym % buckets))
       }
@@ -62,41 +64,61 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
       }
       Block(aggs.toList)
     }
-    val findMatch =
+
+    lazy val findMatchOverflow =
       DecAssign(found, Bool(), False) +
       DecAssign(inRec, input.recType, input.currentRec) +
-      output.resetLocalState +
-      //Printf("Find %d in b %d [ct %d, cs %d]:", inRec, bucket, output.state.count, output.state.chunkSize) +
-      ForBlock(i, output.numArrays,
+      chunk.resetLocalState +
+      //Printf("Find %d in b %d [ct %d, cs %d]:", inRec, bucket, chunk.state.count, chunk.state.chunkSize) +
+      ForBlock(i, chunk.numArrays,
         If(Not(found),
-          //Printf("\tChunk %d [%d slots]:", i, output.maxCursor) +
-              ForBlock(j, output.maxCursor,
-                    If(compareFields(inRec, output.access(j)),
+          //Printf("\tChunk %d [%d slots]:", i, chunk.maxCursor) +
+              ForBlock(j, chunk.maxCursor,
+                    If(compareFields(inRec, chunk.access(j)),
                           (found := True) + aggregate //+
-                              //Printf("\t\tComp %d to %d [s %d]: found = %b", inRec, output.access(j), j, found)
+                              //Printf("\t\tComp %d to %d [s %d]: found = %b", inRec, chunk.access(j), j, found)
                     ) +
                     If(Not(found),
-                     // Printf("\t\tComp %d to %d : found = %b", inRec, output.access(j), found) +
+                     // Printf("\t\tComp %d to %d : found = %b", inRec, chunk.access(j), found) +
                       Nop
                         )
               ) +
-              If(Not(found), output.nonAllocIncrement)
+              If(Not(found), chunk.nonAllocIncrement)
         )
       ) +
-    If(Not(found),
-      DecAssign('old, Index(), output.state.maxSlot) +
-      (output.append) +
-          //Printf("New max slot: %d from old %d", output.state.maxSlot, 'old) +
-          //Printf(s"\tAppend %d at buck %d[c%d - s%d]",
-            //inRec, bucket, output.state.numArrays-1, output.state.maxSlot-1) +
-          (output.access(output.maxCursor-1) := inRec)
-    )
+      If(Not(found),
+        DecAssign('old, Index(), chunk.state.maxSlot) +
+        (chunk.append) +
+            //Printf("New max slot: %d from old %d", chunk.state.maxSlot, 'old) +
+            //Printf(s"\tAppend %d at buck %d[c%d - s%d]",
+              //inRec, bucket, chunk.state.numArrays-1, chunk.state.maxSlot-1) +
+            (chunk.access(chunk.maxCursor-1) := inRec)
+      )
 
-    output.base.globalState +
+    lazy val findMatchNoOverflow =
+      DecAssign(found, Bool(), False) +
+      DecAssign(inRec, input.recType, input.currentRec) +
+      ForBlock(i, output.maxCursor,
+        If(
+            Not(found) && 
+            output.accessMask(i).get && 
+            compareFields(inRec, output.access(i)),
+          (found := True) + aggregate) +
+        If(Not(found) && Not(output.accessMask(i).get),
+          (found := True) + (output.access(i) := inRec) + (output.accessMask(i).get := True)))
+
+    if (op.overflow) {
+      chunk.base.globalState +
+          setBucket +
+          chunk.base.localState(bucket) +
+          chunk.globalState +
+          findMatchOverflow
+    } else {
+      output.globalState +
         setBucket +
-        output.base.localState(bucket) +
-        output.globalState +
-        findMatch
+        output.macroState(bucket) +
+        findMatchNoOverflow
+    }
   }
 }
 

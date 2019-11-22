@@ -289,7 +289,6 @@ class LoopBodyGenerator(elaboration: Elaboration, node: LoDag) {
     case o: Uncat => LoopLevel(lo.Nop)
 
     case o: HashTable => {
-      val chunkArray = output.asInstanceOf[ChunkArray.ChunkView]
       val gen = HashTableGenerator(elaboration)
       LoopLevel(
         mask(
@@ -297,7 +296,7 @@ class LoopBodyGenerator(elaboration: Elaboration, node: LoDag) {
           gen.emit(
             new RecParallelIO(inputs(0), cursor),
             o.hash.map(_ => new RecParallelIO(inputs(1), cursor)),
-            chunkArray,
+            output.asInstanceOf[ArrayView with ParallelMacroView],
             o)
         )
       )

@@ -312,13 +312,23 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
       // TODO: add widths to HiRes types so we can do this properly and set slots t allocate
       // at least a cache line per bucket
       val slots: lo.Expr = lo.Expr(o.slots.getOrElse({ println(s"WARNING: CHOSE SLOTS=4"); Const(4) }))
-      chunkArray(
-          op,
-          base = recInput,
-          buckets = buckets,
-          slots = slots,
-          onePerSlice=true,
-          inlineCounter=o.inlineCounter)
+      if (o.overflow) {
+        chunkArray(
+            op,
+            base = recInput,
+            buckets = buckets,
+            slots = slots,
+            onePerSlice=true,
+            inlineCounter=o.inlineCounter)
+      } else {
+        println(s"buckets $buckets * slots $slots * deep slices ${recInput.deepNumSlices}")
+        val nelems = buckets * slots * recInput.deepNumSlices
+        val (arr, allocs) = recInput.clone(name(op, "htbl"), length = nelems)
+        val mask = makeMask(arr)
+        mask.initializer = Some(_ := lo.False)
+        val sliced = SlicedArray(arr.withMask(Some(mask)), slices = buckets, parallel = true)
+        (sliced, mask :: allocs)
+      }
     }
 
     case o: HashJoin => {

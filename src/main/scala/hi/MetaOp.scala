@@ -457,6 +457,7 @@ case class EquiJoin(
     right: MetaOp,
     lkey: Id,
     rkey: Id,
+    overflow: Boolean=true,
     config: EquiJoin.Config=EquiJoin.Config(),
     isComplete: Boolean=true,
     name: Option[ProgSym]=None,
@@ -472,6 +473,8 @@ case class EquiJoin(
 
   def asComplete: EquiJoin = copy(isComplete = true)
   def asIncomplete: EquiJoin = copy(isComplete = false)
+
+  def withOverflow(overflow: Boolean): EquiJoin = copy(overflow = overflow)
 
   override def completes: Boolean = true
 
@@ -518,7 +521,8 @@ case class EquiJoin(
         hash = Some(config.hash(right(rkey))),
         buckets = Some(Pow2(config.hash.bits)),
         slots = Some(config.slots),
-        inlineCounter = config.inlineCounter)
+        inlineCounter = config.inlineCounter,
+        overflow = overflow)
     }
   }
 
