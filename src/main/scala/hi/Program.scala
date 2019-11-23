@@ -57,7 +57,7 @@ class Program {
         case _ =>
       }
       assigns += Assign(id, o)
-      metaOp = Some(Concrete(o, Set(), name = Some(this)))
+      metaOp = Some(Concrete(o, Seq(), name = Some(this)))
     }
 
     def :=(o: MetaOp): Unit = {

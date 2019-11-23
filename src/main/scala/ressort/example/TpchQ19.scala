@@ -55,8 +55,8 @@ trait Q19Auto { this: TpchQ19 =>
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
 
-  val litem = Concrete('lineitem_, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
-  val part = Concrete('part_, TpchSchema.part.s.fields.map(_.name.get.name).map(Id).toSet)
+  val litem = Concrete('lineitem_, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id))
+  val part = Concrete('part_, TpchSchema.part.s.fields.map(_.name.get.name).map(Id))
 
   val postCond = 
   ('p_brand === BRAND12.n
@@ -150,6 +150,7 @@ case class TpchQ19AutoNopa(
     if (threads > 1) table = table.splitPar(threads)
     if (earlyMat) table = table.rename()
     if (threads > 1) table = table.flatten
+    table = table.rename('p_partkey -> Plus('p_partkey, Const(1))).copy(keepInput = true)
 
     var join: MetaOp = litem
       .withParams(totalBits)
@@ -161,7 +162,8 @@ case class TpchQ19AutoNopa(
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
       .asIncomplete
       .rename()
-      .equiJoin(table, 'l_partkey,'p_partkey)
+      .rename('l_partkey -> Plus('l_partkey, Const(1))).copy(keepInput = true)
+      .equiJoin(table, 'l_partkey, 'p_partkey)
         .withOverflow(!array, array)
         .withHash(joinHash)
         .withCompactTable(compact)

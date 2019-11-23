@@ -60,7 +60,7 @@ object TpchQ06 {
   }
 
   def query(threads: Int=1, crack: Boolean=false, collect: Boolean=false, pad: Int=4096, minDate: Int=constants.minDate): Operator = {
-    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id))
 
     var meta: MetaOp = litem
 

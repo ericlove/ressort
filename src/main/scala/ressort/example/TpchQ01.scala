@@ -68,7 +68,7 @@ class TpchQ01(tpch: TpchSchema.Generator) extends HiResTest {
   val meta = {
     import ressort.hi.meta._
     import ressort.hi.meta.MetaParam._
-    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id).toSet)
+    val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id))
     var m: MetaOp = litem
     val threads = 1
 

@@ -2,7 +2,7 @@
 package ressort.hi.meta
 import ressort.hi._
 import ressort.lo
-import scala.collection.mutable.{HashMap, HashSet, ArrayBuffer}
+import scala.collection.mutable.{HashMap, LinkedHashSet, LinkedHashMap, ArrayBuffer}
 
 sealed trait MetaParam[T] {
   def concrete: ConcreteParam[T] = asInstanceOf[ConcreteParam[T]]
@@ -75,9 +75,9 @@ sealed trait MetaOp {
   def inputs: Seq[MetaOp]
   def withInputs(inputs: Seq[MetaOp]): MetaOp
 
-  def fields: Set[Id]
+  def fields: Seq[Id]
 
-  def usedFields: Set[Id] = Set()
+  def usedFields: Seq[Id] = Seq()
 
   def concrete(implicit p: Program): MetaOp
 
@@ -140,9 +140,9 @@ sealed trait MetaOp {
     */
   def pruneFields: MetaOp = {
     val usedFields = {
-      val fmap = HashMap[MetaOpId, Set[Id]]()
-      def walk(o: MetaOp, inUse: Set[Id]): Unit = {
-        fmap(o.id) = fmap.getOrElse(o.id, Set()) ++ inUse.filter(o.fields.contains)
+      val fmap = HashMap[MetaOpId, Seq[Id]]()
+      def walk(o: MetaOp, inUse: Seq[Id]): Unit = {
+        fmap(o.id) = fmap.getOrElse(o.id, Seq()) ++ inUse.filter(o.fields.contains)
         val nextFields = o match {
           case r: Rename if r.keepInput => r.usedFields ++ r.in.fields.filter(inUse.contains(_))
           case r: Rename => r.usedFields
@@ -199,7 +199,7 @@ object MetaOp {
     // Topologically sorted ordering of the nodes in `dag`, by ID
     private val ordered: Seq[MetaOpId] = {
       var list = List[MetaOpId]()
-      val marked = HashSet[MetaOpId]()
+      val marked = LinkedHashSet[MetaOpId]()
       def walk(o: MetaOp) {
         o.inputs.map(walk)
         if (!marked.contains(o.id)) {
@@ -282,7 +282,7 @@ case class HashConfig(
 
 case class Concrete(
     op: Operator,
-    fields: Set[Id],
+    fields: Seq[Id],
     params: Seq[MetaParam[_]]=Seq(),
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
@@ -364,7 +364,7 @@ case class HashPartition(
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
-  lazy val fields: Set[Id] = in.fields
+  lazy val fields: Seq[Id] = in.fields
 
   def inputs: Seq[MetaOp] = Seq(in) ++ renamed.toSeq
 
@@ -372,7 +372,7 @@ case class HashPartition(
     copy(in = inputs.head, renamed = renamed.map(_ => inputs(1)))
   }
 
-  override def usedFields: Set[Id] = Set(key)
+  override def usedFields: Seq[Id] = Seq(key)
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
     for {
@@ -464,13 +464,13 @@ case class EquiJoin(
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp with NeedsCompletion {
-  lazy val fields: Set[Id] = left.fields ++ right.fields
+  lazy val fields: Seq[Id] = left.fields ++ right.fields
 
   def inputs: Seq[MetaOp] = Seq(left, right)
 
   def withInputs(inputs: Seq[MetaOp]): EquiJoin = copy(left = inputs(0), right = inputs(1))
 
-  override def usedFields: Set[Id] = Set(lkey, rkey)
+  override def usedFields: Seq[Id] = Seq(lkey, rkey)
 
   def asComplete: EquiJoin = copy(isComplete = true)
   def asIncomplete: EquiJoin = copy(isComplete = false)
@@ -652,10 +652,10 @@ case class Rename(
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
 
-  lazy val fields: Set[Id] = {
-    var f = Set[Id]()
-    if (keepInput) f ++= in.fields ++ renames.map(_._1).toSet
-    if (renames.isEmpty) f ++= in.fields else f ++= renames.map(_._1).toSet
+  lazy val fields: Seq[Id] = {
+    var f = Seq[Id]()
+    if (keepInput) f ++= in.fields ++ renames.map(_._1)
+    if (renames.isEmpty) f ++= in.fields else f ++= renames.map(_._1)
     f
   }
 
@@ -663,8 +663,8 @@ case class Rename(
 
   def withInputs(inputs: Seq[MetaOp]): Rename = copy(in = inputs(0))
 
-  override def usedFields: Set[Id] = {
-    val res = renames.flatMap(_._2.ids).toSet
+  override def usedFields: Seq[Id] = {
+    val res = renames.flatMap(_._2.ids)
     res
   }
 
@@ -678,14 +678,14 @@ case class Rename(
 
   private def hiRes(in: Operator)(implicit p: Program): Operator = {
     var assigns = List[Assign]()
-    var renames = Seq[(Id, Expr)]()
+    var renames = LinkedHashMap[Id, Expr]()
     if (this.renames.isEmpty || keepInput)
-      renames = this.in.fields.map(f => f->f).toSeq
+      renames ++= this.in.fields.map(f => f->f)
     renames ++= this.renames
     for ((i, e) <- renames) {
       assigns ::= (i := in(e))
     }
-    Let(assigns.reverse, in = Project(renames.map(p => IdOp(p._1)):_*))
+    Let(assigns.reverse, in = Project(renames.toSeq.map(p => IdOp(p._1)):_*))
   }
 
   def generate(generator: MetaOp.Generator): Seq[MetaOp] = {
@@ -708,7 +708,7 @@ case class Filter(
 
   def fields = in.fields
 
-  override def usedFields: Set[Id] = conds.flatMap(_.ids).toSet
+  override def usedFields: Seq[Id] = conds.flatMap(_.ids)
 
   def asComplete: Filter = copy(isComplete = true)
   def asIncomplete: Filter = copy(isComplete = false)
@@ -782,9 +782,9 @@ case class Aggregate(
 
   def withInputs(inputs: Seq[MetaOp]): Aggregate = copy(in = inputs(0))
 
-  lazy val fields = aggregates.map(_._1).toSet
+  lazy val fields = aggregates.map(_._1)
 
-  override lazy val usedFields = fields.toSet ++ groupBy.toSet
+  override lazy val usedFields = fields ++ groupBy
 
   def asComplete: Aggregate = copy(isComplete = true)
   def asIncomplete: Aggregate = copy(isComplete = false)
