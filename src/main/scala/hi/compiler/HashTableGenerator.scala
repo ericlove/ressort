@@ -105,7 +105,9 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
             compareFields(inRec, output.access(i)),
           (found := True) + aggregate) +
         If(Not(found) && Not(output.readMask(i).get),
-          (found := True) + (output.access(i) := inRec) + (output.setMask(i, True))))
+          (found := True) +
+          (output.access(i) := inRec) +
+          (if (!op.implicitMask) output.setMask(i, True) else Nop)))
 
     if (op.overflow) {
       chunk.base.globalState +

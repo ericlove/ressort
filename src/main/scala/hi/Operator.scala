@@ -533,12 +533,14 @@ case class RestoreHistogram(
   *                the width of the keys (non-aggregate fields) or `hash` if specified.
   * @param slots An optional number of entries per hash bucket. By default, one will be chosen based on
   *              the input types to ensure at least one cache line per bucket.
+  * @param overflow If set to false, each bucket is assumed be large enough to hold all records
+  *                 that may map to it.
+  * @param implicitMask If set in non-overflow mode, the first field of each record will be
+  *                     treated implicitly as a mask, with any non-zero value counted as valid.
   * @param inlineCounter If set, an extra record will be pre-pended to each bucket, and
   *                       its first field will be used as a counter of the number of
   *                       filled slots in the first chunk, until it is full, at which
   *                       point separate counter and pointer arrays will be allocated.
-  * @param overflow If set to false, each bucket is assumed be large enough to hold all records
-  *                 that may map to it.
   */
 case class HashTable(
     o: Operator,
@@ -547,6 +549,7 @@ case class HashTable(
     buckets: Option[Expr] = None,
     slots: Option[Expr] = None,
     overflow: Boolean = true,
+    implicitMask: Boolean = false,
     inlineCounter: Boolean = false)
   extends Operator(
       "HashTable",

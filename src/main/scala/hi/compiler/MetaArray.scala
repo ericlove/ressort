@@ -41,7 +41,7 @@ class Buffer(
     var initializer: Option[LValue => LoAst] = None,
     var finalizer: Option[LValue => LoAst] = None,
     var allocate: Boolean = true,
-    val implicitMask: Boolean = false,
+    var implicitMask: Boolean = false,
     var immaterial: Boolean = false,
     var dynamicSize: Boolean = false,
     var mustMaterialize: Boolean = false) {
@@ -426,7 +426,13 @@ object FlatArray {
     }
     private def maskBuffer: Option[Buffer] = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
     private def mask(n: Expr): Option[LValue] = {
-      maskBuffer.map(a => (if (a.immaterial) a.name else Deref(a.name).sub(n)))
+      maskBuffer.map { a => 
+        val base = if (a.immaterial) a.name else Deref(a.name).sub(n)
+        if (array.buffer.implicitMask)
+          UField(base, 0)
+        else
+          base
+      }
     }
     private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
     def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
@@ -1226,13 +1232,20 @@ object DisjointBase {
     def globalState = Nop
     def localState(n: Expr) = Nop
     def access(n: Expr): LValue = err
+    private def maskBuffer = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
     private def mask(n: Expr): Option[LValue] = {
-      val maskBuffer = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
-      maskBuffer.map(a => (if (array.buffer.immaterial) a.name else Deref(a.name).sub(n)))
+      maskBuffer.map { a => 
+        val base = if (array.buffer.immaterial) a.name else Deref(a.name).sub(n)
+        if (array.buffer.implicitMask)
+          UField(base, 0)
+        else
+          base
+      }
     }
-    def readMask(n: Expr): Option[Expr] = mask(n).map(l => Cast(l, Bool()))
+    private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
+    def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
     def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
-    def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := Cast(value, Bool()))).getOrElse(Nop)
+    def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)
     def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value)
 
     def absolute(n: Expr): LValue = err
@@ -1905,7 +1918,13 @@ object ChunkArray {
 
     private def maskBuffer: Option[Buffer] = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
     private def mask(n: Expr): Option[LValue] = {
-      val res = maskBuffer.map(a => (if (a.immaterial) a.name else Deref(state.curMask).sub(n)))
+      val res = maskBuffer.map { a => 
+        val base = if (a.immaterial) a.name else Deref(state.curMask).sub(n)
+        if (a.implicitMask)
+          UField(base, 0)
+        else
+          base
+      }
       res
     }
     private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())

@@ -323,11 +323,20 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
       } else {
         println(s"buckets $buckets * slots $slots * deep slices ${recInput.deepNumSlices}")
         val nelems = buckets * slots * recInput.deepNumSlices
-        val (arr, allocs) = recInput.clone(name(op, "htbl"), length = nelems)
-        val mask = makeMask(arr)
-        mask.initializer = Some(_ := lo.False)
-        val sliced = SlicedArray(arr.withMask(Some(mask)), slices = buckets, parallel = true)
-        (sliced, mask :: allocs)
+        var (arr, allocs) = recInput.clone(name(op, "htbl"), length = nelems)
+        if (o.implicitMask) {
+          val zero = arr.buffer.recType.toRecord.fields.head.loType.zero
+          arr.buffer.initializer = Some(lo.UField(_, 0) := zero)
+          arr.buffer.implicitMask = true
+          arr = arr.withMask(None)
+        } else {
+          val mask = makeMask(arr)
+          mask.initializer = Some(_ := lo.False)
+          allocs = mask :: allocs
+          arr = arr.withMask(Some(mask))
+        }
+        val sliced = SlicedArray(arr, slices = buckets, parallel = true)
+        (sliced, allocs)
       }
     }
 

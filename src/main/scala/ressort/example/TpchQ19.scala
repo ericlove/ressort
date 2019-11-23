@@ -162,7 +162,7 @@ case class TpchQ19AutoNopa(
       .asIncomplete
       .rename()
       .equiJoin(table, 'l_partkey,'p_partkey)
-        .withOverflow(!array)
+        .withOverflow(!array, array)
         .withHash(joinHash)
         .withCompactTable(compact)
         .withInlineCounter(inline)
