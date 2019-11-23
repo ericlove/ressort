@@ -704,6 +704,7 @@ case class CheckCast(
     // Handle cases where explicit conversion is not otherwise covered by `accepts()` coercion
     (expr.t, eType) match {
       case (to, from) if to.accepts(from) => Nil
+      case (b: Bool, n: NonRec) => Nil
       case (f: LoFloat, d: LoDouble) => Nil
       case (iv: IntValued, f: LoFloat) => Nil
       case (iv: IntValued, d: LoDouble) => Nil
