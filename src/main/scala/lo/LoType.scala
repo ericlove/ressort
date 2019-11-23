@@ -130,6 +130,9 @@ sealed trait NonRec extends Primitive {
   def setConst(c: Boolean): NonRec
 
   def widthBytes: Int
+
+  /** Expression representing the zero or false value of this type */
+  def zero: Expr
 }
 
 
@@ -180,6 +183,8 @@ sealed abstract class IntValued(
   override def mangledName = constPrefix + className
 
   def widthBytes = maxBytes
+
+  def zero: Expr = Const(0)
 }
 
 sealed abstract class FixedWidthInt(val bytes: Int, signed: Boolean=true) 
@@ -236,6 +241,8 @@ case class LoFloat(const: Boolean=false) extends NonRec {
   }
 
   def widthBytes = 4
+
+  def zero: Expr = FloatConst(0.0.toFloat)
 }
 
 case class LoDouble(const: Boolean=false) extends NonRec {
@@ -251,6 +258,8 @@ case class LoDouble(const: Boolean=false) extends NonRec {
   }
 
   def widthBytes = 8
+
+  def zero: Expr = DoubleConst(0.0)
 }
 
 case class Bits(const: Boolean=false) extends LoType {
@@ -291,6 +300,8 @@ case class Ptr(loType: LoType, const: Boolean=false) extends NonRec {
   override def mangledName = constPrefix + "ptr_" + loType.mangledName
 
   def widthBytes = 8
+
+  def zero: Expr = Null
 }
 
 case object NullType extends NonRec {
@@ -304,6 +315,8 @@ case object NullType extends NonRec {
     case NullType => true
     case _ => false
   }
+
+  def zero: Expr = Null
 }
 
 case class Bool(const: Boolean=false) extends NonRec {
@@ -312,6 +325,8 @@ case class Bool(const: Boolean=false) extends NonRec {
   override def mangledName = "bool"
 
   def widthBytes = 1
+
+  def zero: Expr = False
 }
 
 case class Func(
