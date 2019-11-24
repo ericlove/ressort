@@ -484,12 +484,6 @@ case class EquiJoin(
   override def completes: Boolean = true
 
   def build(right: ProgSym)(implicit p: Program): Operator = {
-    val parallel = config.threads > 1
-    val split: Operator = if (parallel && config.partition) {
-      SplitPar(right, Const(config.threads))
-    } else {
-      right
-    }
     def rec(in: Operator): Operator = if (config.gather) {
       Let(
         List(
@@ -504,9 +498,9 @@ case class EquiJoin(
       val part = p.fresh("jpart")
       val block = p.fresh("block")
       val in = p.fresh("in")
-      in := split
+      in := this.right
       hist := Histogram(config.hash(in(rkey)), slices = Pow2(config.hash.bits))
-      hist := Offsets(hist, depth = if (parallel) 1 else 0)
+      hist := Offsets(hist, depth = if (config.parallelPart) 1 else 0)
       if (config.blockBuild) {
         block := Cat(hist, in)
         hist := Uncat(block, 0)
@@ -514,10 +508,10 @@ case class EquiJoin(
       } else {
         block := in
       }
-      part := Partition(config.hash(block(rkey)), rec(block), hist, parallel = parallel)
+      part := Partition(config.hash(block(rkey)), rec(block), hist, parallel = config.parallelPart)
       hist := Uncat(part, 1)
       part := Uncat(part, 0)
-      if (parallel)
+      if (config.parallelPart)
         hist := LastArray(hist)
       RestoreHistogram(part, hist)
     } else {
@@ -589,9 +583,8 @@ case class EquiJoin(
 
   def withPartition(
       partition: MetaParam[Boolean],
-      threads: MetaParam[Int]=config.threads,
-      split: MetaParam[Boolean]=config.split): EquiJoin = 
-    copy(config = config.copy(partition=partition, threads=threads, split=split))
+      parallelPart: MetaParam[Boolean]=config.parallelPart): EquiJoin = 
+    copy(config = config.copy(partition=partition, parallelPart=parallelPart))
   def withGather(gather: MetaParam[Boolean]): EquiJoin = copy(config = config.copy(gather = gather))
   def withSlots(slots: MetaParam[Expr]): EquiJoin = copy(config = config.copy(slots = slots))
   def withInlineCounter(inlineCounter: MetaParam[Boolean]): EquiJoin = copy(config = config.copy(inlineCounter = inlineCounter))
@@ -611,8 +604,7 @@ object EquiJoin {
       inlineCounter: MetaParam[Boolean] = false,
       compactTable: MetaParam[Boolean] = false,
       partition: MetaParam[Boolean] = false,
-      split: MetaParam[Boolean] = false,
-      threads: MetaParam[Int] = 0,
+      parallelPart: MetaParam[Boolean] = false,
       blockHash: MetaParam[Boolean] = true,
       blockBuild: MetaParam[Boolean] = true) {
 
@@ -625,8 +617,7 @@ object EquiJoin {
         blockHash <- this.blockHash.splat
         blockBuild <- this.blockBuild.splat
         partition <- this.partition.splat
-        split <- this.split.splat
-        threads <- this.threads.splat
+        parallelPart <- this.parallelPart.splat
       } yield {
         Config(
           hash = hash,
@@ -637,8 +628,7 @@ object EquiJoin {
           blockHash=blockHash,
           blockBuild=blockBuild,
           partition=partition,
-          split=split,
-          threads=threads)
+          parallelPart=parallelPart)
       }
     }
   }

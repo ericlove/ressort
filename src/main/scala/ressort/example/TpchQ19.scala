@@ -40,8 +40,8 @@ abstract class TpchQ19(tpch: Option[TpchSchema.Generator]) extends HiResTest {
                   (p_container == LG_CASE.n || p_container == LG_BOX.n || p_container == LG_PACK.n || p_container == LG_PKG.n)
                   && l_quantity >= 20 && l_quantity <= 20 + 10 && 1 <= p_size && p_size <= 15)
         if (cond) {
-          val l_extendedprice = tpch.l_extendedprice(i)
-          val l_discount = tpch.l_discount((i))
+          val l_extendedprice = tpch.l_extendedprice(i).toDouble
+          val l_discount = tpch.l_discount((i)).toDouble
           sum += l_extendedprice * (1.0 - l_discount)
         }
       }
@@ -119,7 +119,7 @@ case class TpchQ19AutoNopa(
     earlyMat: Boolean=true,
     inline: Boolean=false,
     compact: Boolean=false,
-    array: Boolean=true
+    array: Boolean=false
   ) extends TpchQ19(tpch) with Q19Auto {
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
@@ -147,9 +147,8 @@ case class TpchQ19AutoNopa(
 
   val meta = {
     var table: MetaOp = part
-    if (threads > 1) table = table.splitPar(threads)
+    if (threads > 1 && buildPartitioned) table = table.splitPar(threads)
     if (earlyMat) table = table.rename()
-    if (threads > 1) table = table.flatten
     table = table.rename('p_partkey -> Plus('p_partkey, Const(1))).copy(keepInput = true)
 
     var join: MetaOp = litem
@@ -172,15 +171,15 @@ case class TpchQ19AutoNopa(
         .withSlots(slots)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
-        .withPartition(partition=buildPartitioned, threads=threads)
+        .withPartition(partition=buildPartitioned, parallelPart=threads>1)
         .asIncomplete
 
     join
       .filter(postCond).asIncomplete
       .rename('price -> Cast('l_extendedprice, lo.LoDouble()) * (DoubleConst(1.0) - 'l_discount))
       .aggregate(('price, PlusOp))
-      .rename('price -> Cast('price, lo.LoFloat()))
-      .connector(o => NestedSumFloat(o('price)))
+      .rename('price -> Cast('price, lo.LoDouble()))
+      .connector(o => NestedSumDouble(o('price))(Cast(UField(0), lo.LoFloat())))
   }
 
 }
@@ -298,7 +297,7 @@ class TpchQ19AutoPart(
         .withGather(earlyMatTable)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
-        .withPartition(partition=buildPartitioned, threads=threads)
+        .withPartition(partition=buildPartitioned, parallelPart=true)
         .asIncomplete
 
     join = join
