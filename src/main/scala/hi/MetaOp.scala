@@ -85,6 +85,8 @@ sealed trait MetaOp {
   def completes: Boolean = false
 
   def rename(renames: (Id, Expr)*): Rename = Rename(this, renames)
+  def append(renames: (Id, Expr)*): Rename = Rename(this, renames).copy(keepInput=true)
+  def prepend(renames: (Id, Expr)*): Rename = this.append(renames:_*).copy(prepend=true)
   def addFields(fields: (Id, Expr)*): Rename = Rename(this, fields, keepInput=true)
   def equiJoin(right: MetaOp, lkey: Id, rkey: Id): EquiJoin = EquiJoin(this, right, lkey, rkey)
   def filter(conds: Expr*): Filter = Filter(this, conds.toSeq)
@@ -471,7 +473,13 @@ case class EquiJoin(
 
   def withInputs(inputs: Seq[MetaOp]): EquiJoin = copy(left = inputs(0), right = inputs(1))
 
-  override def usedFields: Seq[Id] = Seq(lkey, rkey)
+  override def usedFields: Seq[Id] = {
+    val base = List(lkey, rkey)
+    if (implicitMask)
+      right.fields.head :: base
+    else
+      base
+  }
 
   def asComplete: EquiJoin = copy(isComplete = true)
   def asIncomplete: EquiJoin = copy(isComplete = false)
@@ -643,13 +651,15 @@ case class Rename(
     in: MetaOp,
     renames: Seq[(Id, Expr)],
     keepInput: Boolean=false,
+    prepend: Boolean=false,
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
 
   lazy val fields: Seq[Id] = {
     var f = Seq[Id]()
-    if (keepInput) f ++= in.fields ++ renames.map(_._1)
+    if (keepInput && !prepend) f ++= in.fields ++ renames.map(_._1)
+    if (keepInput && prepend) f ++= renames.map(_._1) ++ in.fields
     if (renames.isEmpty) f ++= in.fields else f ++= renames.map(_._1)
     f
   }
@@ -674,9 +684,11 @@ case class Rename(
   private def hiRes(in: Operator)(implicit p: Program): Operator = {
     var assigns = List[Assign]()
     var renames = LinkedHashMap[Id, Expr]()
-    if (this.renames.isEmpty || keepInput)
+    if (this.renames.isEmpty || keepInput && !prepend)
       renames ++= this.in.fields.map(f => f->f)
     renames ++= this.renames
+    if (this.renames.isEmpty || keepInput && prepend)
+      renames ++= this.in.fields.map(f => f->f)
     for ((i, e) <- renames) {
       assigns ::= (i := in(e))
     }

@@ -114,9 +114,9 @@ case class TpchQ19AutoNopa(
     threads: Int=4,
     extraHashBits: Option[Int]=None,
     slots: Expr = Const(2),
-    buildPartitioned: Boolean=true,
+    buildPartitioned: Boolean=false,
     blockBuild: Boolean=true,
-    earlyMat: Boolean=false,
+    earlyMat: Boolean=true,
     inline: Boolean=false,
     compact: Boolean=false,
     array: Boolean=true
@@ -149,7 +149,10 @@ case class TpchQ19AutoNopa(
     var table: MetaOp = part
     if (threads > 1 && buildPartitioned) table = table.splitPar(threads)
     if (earlyMat && !buildPartitioned) table = table.rename()
-    val values = if (earlyMat) table.rename() else table
+    var values = if (earlyMat) table.rename() else table
+
+    if (array && !buildPartitioned)
+      table = table.prepend('valid -> True)
 
     var join: MetaOp = litem
       .withParams(totalBits)
@@ -161,6 +164,8 @@ case class TpchQ19AutoNopa(
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
       .asIncomplete
       .rename()
+
+    join = join
       .equiJoin(table, 'l_partkey, 'p_partkey)
         .withOverflow(!array, array)
         .withHash(joinHash)
