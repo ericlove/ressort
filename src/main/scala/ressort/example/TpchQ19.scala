@@ -148,8 +148,8 @@ case class TpchQ19AutoNopa(
   val meta = {
     var table: MetaOp = part
     if (threads > 1 && buildPartitioned) table = table.splitPar(threads)
-    if (earlyMat) table = table.rename()
-    table = table.rename('p_partkey -> Plus('p_partkey, Const(1))).copy(keepInput = true)
+    if (earlyMat && !buildPartitioned) table = table.rename()
+    table = table.rename('p_partkey -> Plus('p_partkey, Const(1))).copy(keepInput = !buildPartitioned)
 
     var join: MetaOp = litem
       .withParams(totalBits)

@@ -457,6 +457,7 @@ case class EquiJoin(
     right: MetaOp,
     lkey: Id,
     rkey: Id,
+    rightRenamed: Option[MetaOp]=None,
     overflow: Boolean=true,
     implicitMask: Boolean=false,
     config: EquiJoin.Config=EquiJoin.Config(),
@@ -480,6 +481,8 @@ case class EquiJoin(
       implicitMask: Boolean=this.implicitMask): EquiJoin = {
     copy(overflow = overflow, implicitMask = implicitMask)
   }
+
+  def withRightRenamed(rightRenamed: Option[MetaOp]): EquiJoin = copy(rightRenamed = rightRenamed)
 
   override def completes: Boolean = true
 
@@ -508,6 +511,8 @@ case class EquiJoin(
       } else {
         block := in
       }
+      p.rename(this.right.id, right)
+      this.rightRenamed.map(right := _)
       part := Partition(config.hash(block(rkey)), rec(block), hist, parallel = config.parallelPart)
       hist := Uncat(part, 1)
       part := Uncat(part, 0)
