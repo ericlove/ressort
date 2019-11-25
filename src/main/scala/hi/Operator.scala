@@ -716,7 +716,8 @@ case class Collect(
 
 case class Gather(
     indices: Operator,
-    target: Operator)
+    target: Operator,
+    absolute: Boolean=false)
   extends Operator("Gather", indices::target::Nil)
 
 case class Block(o: Operator, nest: Boolean=false, nonFusable: Boolean=false) extends Operator((if (nonFusable) "BlockAll" else "Block"), o::Nil)

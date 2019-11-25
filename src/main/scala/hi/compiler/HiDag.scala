@@ -530,7 +530,7 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
       }
 
       case o: hi.Gather => {
-        val newOp = hi.Gather(hi.DagOp(inputs(0).nodeId), hi.DagOp(inputs(1).nodeId))
+        val newOp = hi.Gather(hi.DagOp(inputs(0).nodeId), hi.DagOp(inputs(1).nodeId), absolute=o.absolute)
         HiArrayOp(
           materialInputs     = List(false, true),
           arrayInputs         = inputs.map(_ => false),

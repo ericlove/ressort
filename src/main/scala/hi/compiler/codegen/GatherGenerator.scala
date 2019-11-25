@@ -8,14 +8,17 @@ case class GatherGenerator(
     elaboration: Elaboration)
   extends CodeGenerator {
 
-  val generatorName = "sel"
+  val generatorName = "gath"
 
 
   def emit(
       indices: RecParallelIO,
-      target: IndexableIO,
+      target: ArrayView,
       output: RecParallelIO,
       op: hi.Gather): LoAst = {
-    (output.currentRec := target.index(indices.currentRec))
+    if (op.absolute)
+      (output.currentRec := target.absolute(indices.currentRec))
+    else
+      (output.currentRec := target.access(indices.currentRec))
   }
 }

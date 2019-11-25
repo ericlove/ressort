@@ -491,7 +491,7 @@ case class EquiJoin(
       Let(
         List(
           rkey := in(rkey),
-          'position := Position(in, relative=true)),
+          'position := Position(in)),
         in = Project(IdOp(rkey), 'position))
     } else {
       in
@@ -571,7 +571,8 @@ case class EquiJoin(
         base.projFields(left.fields.filter(_ != lkey).toSeq:_*),
         Gather(
           base(UField(numLeft+1)),
-          right.name.get))
+          right.name.get,
+          absolute = true))
     } else {
       base
     }

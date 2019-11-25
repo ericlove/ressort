@@ -277,7 +277,7 @@ class LoopBodyGenerator(elaboration: Elaboration, node: LoDag) {
           inputs(0),
           gen.emit(
             indices = new RecParallelIO(inputs(0), cursor),
-            target = new IndexableIO(inputs(1)),
+            target = inputs(1),
             output = new RecParallelIO(output, cursor),
             op = o))
       }
