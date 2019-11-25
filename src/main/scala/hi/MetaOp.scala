@@ -491,7 +491,7 @@ case class EquiJoin(
       Let(
         List(
           rkey := in(rkey),
-          'position := Position(in)),
+          'position := Position(in, relative=true)),
         in = Project(IdOp(rkey), 'position))
     } else {
       in
@@ -499,7 +499,7 @@ case class EquiJoin(
     if (config.partition) {
       val hist = p.fresh("hist")
       val part = p.fresh("jpart")
-      val block = p.fresh("block")
+      val block = if (config.blockBuild) right else p.fresh("block")
       val in = p.fresh("in")
       in := this.right
       hist := Histogram(config.hash(in(rkey)), slices = Pow2(config.hash.bits))
@@ -508,11 +508,11 @@ case class EquiJoin(
         block := Cat(hist, in)
         hist := Uncat(block, 0)
         block := Uncat(block, 1)
+        p.rename(this.right.id, block)
+        this.rightRenamed.map(block := _)
       } else {
         block := in
       }
-      p.rename(this.right.id, right)
-      this.rightRenamed.map(right := _)
       part := Partition(config.hash(block(rkey)), rec(block), hist, parallel = config.parallelPart)
       hist := Uncat(part, 1)
       part := Uncat(part, 0)
@@ -542,7 +542,6 @@ case class EquiJoin(
     right := this.right
     left := this.left
     val newLeft = left.metaOp.get
-    val newRight = right.metaOp.get
     table := build(right)
     if (config.compactTable && !config.partition)
       table := Compact(table, hist=Some(Offsets(table)))
@@ -558,7 +557,7 @@ case class EquiJoin(
       off := Offsets(join)
       join := Compact(join, hist=Some(off))
     }
-    copy(left = newLeft, right = newRight, name = Some(join))
+    copy(left = newLeft, right = right.metaOp.get, name = Some(join))
   }
 
   override def asOperator(connector: Option[Operator=>Operator]=None): Operator = {

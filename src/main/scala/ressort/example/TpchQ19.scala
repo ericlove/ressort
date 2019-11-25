@@ -114,12 +114,12 @@ case class TpchQ19AutoNopa(
     threads: Int=4,
     extraHashBits: Option[Int]=None,
     slots: Expr = Const(2),
-    buildPartitioned: Boolean=false,
-    blockBuild: Boolean=false,
-    earlyMat: Boolean=true,
+    buildPartitioned: Boolean=true,
+    blockBuild: Boolean=true,
+    earlyMat: Boolean=false,
     inline: Boolean=false,
     compact: Boolean=false,
-    array: Boolean=false
+    array: Boolean=true
   ) extends TpchQ19(tpch) with Q19Auto {
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
@@ -149,7 +149,7 @@ case class TpchQ19AutoNopa(
     var table: MetaOp = part
     if (threads > 1 && buildPartitioned) table = table.splitPar(threads)
     if (earlyMat && !buildPartitioned) table = table.rename()
-    table = table.rename('p_partkey -> Plus('p_partkey, Const(1))).copy(keepInput = !buildPartitioned)
+    val values = if (earlyMat) table.rename() else table
 
     var join: MetaOp = litem
       .withParams(totalBits)
@@ -161,7 +161,6 @@ case class TpchQ19AutoNopa(
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
       .asIncomplete
       .rename()
-      .rename('l_partkey -> Plus('l_partkey, Const(1))).copy(keepInput = true)
       .equiJoin(table, 'l_partkey, 'p_partkey)
         .withOverflow(!array, array)
         .withHash(joinHash)
@@ -173,6 +172,7 @@ case class TpchQ19AutoNopa(
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, parallelPart=threads>1)
         .asIncomplete
+        .withRightRenamed(rightRenamed = (if (blockBuild && buildPartitioned) Some(values) else None))
 
     join
       .filter(postCond).asIncomplete
