@@ -196,17 +196,17 @@ class TpchQ19AutoPart(
     val partSize: Expr = Const(1 << 12),
     val partBits: Expr = Const(6),
     val threads: Int=16,
-    val preThreads: Int=4,
+    val preThreads: Int=0,
     val postThreads: Int=0,
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=false,
     val earlyMatTable: Boolean=false,
-    val earlyMat: Boolean=true,
-    val buildPartitioned: Boolean=true,
+    val earlyMat: Boolean=false,
+    val buildPartitioned: Boolean=false,
     val blockBuild: Boolean=true,
     val blockProbe: Boolean=true,
-    val twoSided: Boolean=false,
+    val twoSided: Boolean=true,
     val threadLocal: Boolean=true,
     val inline: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
@@ -273,8 +273,9 @@ class TpchQ19AutoPart(
           .withBlock(blockBuild)
           .withGather(!partAll)
           .withParallel(threads > 1)
-    } else if (!blockBuild) {
-      table = table.rename()
+    } else  {
+      if (threads > 1 && buildPartitioned) table = table.splitPar(threads)
+      if (!blockBuild) table = table.rename()
     }
     var values = if (earlyMatTable) table.rename() else table
 
