@@ -148,7 +148,7 @@ sealed trait MetaOp {
         val nextFields = o match {
           case r: Rename if r.keepInput => r.usedFields ++ r.in.fields.filter(inUse.contains(_))
           case r: Rename => r.usedFields
-          case _ => o.usedFields ++ inUse
+          case _ => o.usedFields ++ inUse.filter(!o.usedFields.contains(_))
         }
         o.inputs.map(i => walk(i, nextFields))
       }
@@ -662,7 +662,10 @@ case class Rename(
     var f = Seq[Id]()
     if (keepInput && !prepend) f ++= in.fields ++ renames.map(_._1)
     if (keepInput && prepend) f ++= renames.map(_._1) ++ in.fields
-    if (renames.isEmpty) f ++= in.fields else f ++= renames.map(_._1)
+    if (renames.isEmpty)
+      f ++= in.fields
+    else
+      f ++= renames.map(_._1)
     f
   }
 
