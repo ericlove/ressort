@@ -111,6 +111,7 @@ case class TpchQ19Simple(tpch: Option[TpchSchema.Generator]) extends TpchQ19(tpc
 
 case class TpchQ19AutoNopa(
     tpch: Option[TpchSchema.Generator],
+    partSize: Expr = Const(1 << 12),
     threads: Int=4,
     extraHashBits: Option[Int]=None,
     slots: Expr = Const(2),
@@ -136,7 +137,7 @@ case class TpchQ19AutoNopa(
     s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr$arrayStr"
   }
 
-  val totalBits = new ParamList[Expr](List(Log2Up(tpch.get.partSize))) //Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(partSize))) //Length('part))))
   val joinBits = new ExprParam(totalBits, e => e + Const(extraHashBits.getOrElse(0)))
   val msb = new ExprParam(totalBits, e => e - Const(1))
   val joinHash = HashConfig(
