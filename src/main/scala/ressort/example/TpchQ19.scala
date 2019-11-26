@@ -137,7 +137,7 @@ case class TpchQ19AutoNopa(
     s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr$arrayStr"
   }
 
-  val totalBits = new ParamList[Expr](List(Log2Up(partSize))) //Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
   val joinBits = new ExprParam(totalBits, e => e + Const(extraHashBits.getOrElse(0)))
   val msb = new ExprParam(totalBits, e => e - Const(1))
   val joinHash = HashConfig(
@@ -196,21 +196,22 @@ class TpchQ19AutoPart(
     val partSize: Expr = Const(1 << 12),
     val partBits: Expr = Const(6),
     val threads: Int=16,
-    val preThreads: Int=0,
+    val preThreads: Int=4,
     val postThreads: Int=0,
     val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=false,
     val earlyMatTable: Boolean=false,
     val earlyMat: Boolean=true,
-    val buildPartitioned: Boolean=false,
+    val buildPartitioned: Boolean=true,
     val blockBuild: Boolean=true,
     val blockProbe: Boolean=true,
-    val twoSided: Boolean=true,
+    val twoSided: Boolean=false,
     val threadLocal: Boolean=true,
     val inline: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
 
+    assert(threadLocal || (preThreads == 0 && postThreads == 0))
 
   val name = {
     val threadsStr = s"_${threads}t"
@@ -237,7 +238,7 @@ class TpchQ19AutoPart(
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(partSize)))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
   val partMsb = new ExprParam(totalBits, e => e - Const(1))
@@ -272,9 +273,10 @@ class TpchQ19AutoPart(
           .withBlock(blockBuild)
           .withGather(!partAll)
           .withParallel(threads > 1)
-    } else {
+    } else if (!blockBuild) {
       table = table.rename()
     }
+    var values = if (earlyMatTable) table.rename() else table
 
     var join: MetaOp = litem.withParams(totalBits)
 
@@ -285,6 +287,7 @@ class TpchQ19AutoPart(
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
+      .asIncomplete
       .partition('l_partkey, renamed = (if (partAll) Some(_.rename()) else None))
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
@@ -300,10 +303,11 @@ class TpchQ19AutoPart(
         .withInlineCounter(inline)
         .withSlots(Const(slots))
         .withHash(joinHash)
-        .withGather(earlyMatTable)
+        .withGather(!earlyMatTable)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
         .withPartition(partition=buildPartitioned, parallelPart=true)
+        .withRightRenamed(rightRenamed = (if (blockBuild && buildPartitioned) Some(values) else None))
         .asIncomplete
 
     join = join

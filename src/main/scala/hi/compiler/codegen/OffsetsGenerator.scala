@@ -148,6 +148,7 @@ class OffsetsProblemInstance(
       case _ if (!op.inPlace) => LoopLevel(ast, allocation = alloc)
       case 0 => LoopLevel(alloc + ast)
       case 1 => LoopLevel(ast, initializer = alloc)
+      // TODO: Eventually handle other "depths" that require clearing at diff. levels
       case _ => LoopLevel(ast, allocation = alloc)
     }
   }
