@@ -328,7 +328,6 @@ case class Connector(
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
-
   def fields = in.fields
 
   def inputs: Seq[MetaOp] = Seq(in)
@@ -421,7 +420,7 @@ case class HashPartition(
       case _ => IdOp(name.get)
     }
     if (config.gather.asInstanceOf[FixedParam[Boolean]].fixed)
-      Gather(base(UField(1)), in.name.get)
+      Gather(base(UField(1)), in.name.get, absolute=true)
     else
       base
   }
