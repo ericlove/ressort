@@ -1929,9 +1929,9 @@ object ChunkArray {
     }
     private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
     def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
-    def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n + state.offset)
+    def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
     def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)
-    def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n + state.offset, value)
+    def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value)
 
     def append: LoAst = {
       if (array.buffer.immaterial)

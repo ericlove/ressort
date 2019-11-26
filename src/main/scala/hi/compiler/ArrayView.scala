@@ -340,9 +340,9 @@ abstract class StatefulNestedView(state: NestedViewState) extends NestedView wit
 
   def absolute(n: Expr) = base.absolute(n)
 
-  def readMaskAbsolute(n: Expr) = base.readMaskAbsolute(state.offset + n)
+  def readMaskAbsolute(n: Expr) = base.readMaskAbsolute(n)
 
-  def setMaskAbsolute(n: Expr, value: Expr) = base.setMaskAbsolute(state.offset + n, value)
+  def setMaskAbsolute(n: Expr, value: Expr) = base.setMaskAbsolute(n, value)
 
   def physVecLen = state.physVecLen
 
