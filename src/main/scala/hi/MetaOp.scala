@@ -469,9 +469,11 @@ case class EquiJoin(
   extends MetaOp with NeedsCompletion {
   lazy val fields: Seq[Id] = left.fields ++ right.fields
 
-  def inputs: Seq[MetaOp] = Seq(left, right)
+  def inputs: Seq[MetaOp] = Seq(left, right) ++ rightRenamed
 
-  def withInputs(inputs: Seq[MetaOp]): EquiJoin = copy(left = inputs(0), right = inputs(1))
+  def withInputs(inputs: Seq[MetaOp]): EquiJoin = {
+    copy(left = inputs(0), right = inputs(1), rightRenamed = rightRenamed.map(_ => inputs(2)))
+  }
 
   override def usedFields: Seq[Id] = {
     val base = List(lkey, rkey)

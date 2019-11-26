@@ -114,7 +114,7 @@ case class TpchQ19AutoNopa(
     threads: Int=4,
     extraHashBits: Option[Int]=None,
     slots: Expr = Const(2),
-    buildPartitioned: Boolean=false,
+    buildPartitioned: Boolean=true,
     blockBuild: Boolean=true,
     earlyMat: Boolean=true,
     inline: Boolean=false,
