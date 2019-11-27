@@ -111,9 +111,8 @@ case class TpchQ19Simple(tpch: Option[TpchSchema.Generator]) extends TpchQ19(tpc
 
 case class TpchQ19AutoNopa(
     tpch: Option[TpchSchema.Generator],
-    partSize: Expr = Const(1 << 12),
     threads: Int=4,
-    extraHashBits: Option[Int]=None,
+    useHash: Boolean=false,
     slots: Expr = Const(2),
     buildPartitioned: Boolean=true,
     blockBuild: Boolean=true,
@@ -126,7 +125,7 @@ case class TpchQ19AutoNopa(
   import ressort.hi.meta.MetaParam._
   override val name = {
     val threadsStr = s"_${threads}t"
-    val useHashStr = extraHashBits.map(_.toString.replace("-", "m")).map(n => s"_hash${n}eb").getOrElse("")
+    val useHashStr = if (useHash) "_h64" else ""
     val slotsStr = s"_${slots}s"
     val compactStr = if (compact) "_cpct" else ""
     val earlyMatStr = if (earlyMat) "_em" else ""
@@ -137,13 +136,13 @@ case class TpchQ19AutoNopa(
     s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr$arrayStr"
   }
 
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
-  val joinBits = new ExprParam(totalBits, e => e + Const(extraHashBits.getOrElse(0)))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part)/slots)))
+  val joinBits = new ExprParam(totalBits, e => e)
   val msb = new ExprParam(totalBits, e => e - Const(1))
   val joinHash = HashConfig(
     bits = joinBits, 
-    width = (if (array) 0 else 64),
-    msb = (if (array) msb else Const(64))
+    width = (if (array || !useHash) 0 else 64),
+    msb = (if (array || !useHash) msb else Const(64))
   )
 
   val meta = {
@@ -193,12 +192,11 @@ case class TpchQ19AutoNopa(
 class TpchQ19AutoPart(
     val tpch: Option[TpchSchema.Generator],
     val partAll: Boolean=false,
-    val partSize: Expr = Const(1 << 12),
     val partBits: Expr = Const(6),
+    val useHash: Boolean=false,
     val threads: Int=16,
     val preThreads: Int=0,
     val postThreads: Int=0,
-    val extraHashBits: Option[Int]=None,
     val slots: Int=1,
     val compact: Boolean=false,
     val earlyMatTable: Boolean=false,
@@ -211,12 +209,12 @@ class TpchQ19AutoPart(
     val inline: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
 
-    assert(threadLocal || (preThreads == 0 && postThreads == 0))
+  assert(threadLocal || (preThreads == 0 && postThreads == 0))
 
   val name = {
     val threadsStr = s"_${threads}t"
-    val useHashStr = extraHashBits.map(_.toString.replace("-", "m")).map(n => s"_hash${n}eb").getOrElse("")
     val slotsStr = s"_${slots}s"
+    val useHashStr = if (useHash) "_h64" else ""
     val compactStr = if (compact) "_cpct" else ""
     val earlyMatTableStr = if (earlyMatTable) "_pem" else ""
     val earlyMatStr = if (earlyMat) "_em" else ""
@@ -242,8 +240,9 @@ class TpchQ19AutoPart(
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
   val partMsb = new ExprParam(totalBits, e => e - Const(1))
-  val partHash = HashConfig(bits = partBits, msb = partMsb)
-  val joinHash = HashConfig(bits = joinBits, msb = joinMsb)
+  val width = if (useHash) 64 else 0
+  val partHash = HashConfig(bits = partBits, msb = partMsb, width = width)
+  val joinHash = HashConfig(bits = joinBits, msb = joinMsb, width = width)
 
   val meta = {
     var table: MetaOp = part
