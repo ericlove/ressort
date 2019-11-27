@@ -193,15 +193,16 @@ class TpchQ19AutoPart(
     val tpch: Option[TpchSchema.Generator],
     val partAll: Boolean=false,
     val partBits: Expr = Const(6),
+    val subBits: Expr = Const(0),
     val useHash: Boolean=false,
     val threads: Int=16,
     val preThreads: Int=0,
     val postThreads: Int=0,
     val slots: Int=1,
     val compact: Boolean=false,
-    val earlyMatTable: Boolean=false,
-    val earlyMat: Boolean=false,
-    val buildPartitioned: Boolean=false,
+    val earlyMatTable: Boolean=true,
+    val earlyMat: Boolean=true,
+    val buildPartitioned: Boolean=true,
     val blockBuild: Boolean=true,
     val blockProbe: Boolean=true,
     val twoSided: Boolean=true,
@@ -228,15 +229,16 @@ class TpchQ19AutoPart(
     val threadLocalStr = if (threadLocal) "_tlocal" else ""
     val preThreadsStr = s"_${preThreads}prth"
     val postThreadsStr = s"_${postThreads}psth"
+    val subBitsStr = s"_${subBits}sb"
     val allStr = if (partAll) "all" else "single"
-    s"q19part$allStr$threadsStr$useHashStr$nbitsStr$slotsStr$compactStr" +
+    s"q19part$allStr$threadsStr$useHashStr$nbitsStr$subBitsStr$slotsStr$compactStr" +
       s"$buildPartitionedStr$earlyMatTableStr$earlyMatStr$inlineStr$twoSideStr" +
       s"$threadLocalStr$preThreadsStr$postThreadsStr"
   }
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part))))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part)) - subBits))
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
   val partMsb = new ExprParam(totalBits, e => e - Const(1))
