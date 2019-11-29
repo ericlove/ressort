@@ -114,7 +114,7 @@ case class TpchQ19AutoNopa(
     threads: Int=4,
     useHash: Boolean=false,
     slots: Expr = Const(2),
-    buildPartitioned: Boolean=true,
+    buildPartitioned: Boolean=false,
     blockBuild: Boolean=true,
     earlyMat: Boolean=true,
     inline: Boolean=false,
@@ -202,12 +202,13 @@ class TpchQ19AutoPart(
     val compact: Boolean=false,
     val earlyMatTable: Boolean=true,
     val earlyMat: Boolean=true,
-    val buildPartitioned: Boolean=true,
+    val buildPartitioned: Boolean=false,
     val blockBuild: Boolean=true,
     val blockProbe: Boolean=true,
     val twoSided: Boolean=true,
     val threadLocal: Boolean=true,
-    val inline: Boolean=true)
+    val inline: Boolean=true,
+    val array: Boolean=true)
   extends TpchQ19(tpch) with Q19Auto {
 
   assert(threadLocal || (preThreads == 0 && postThreads == 0))
@@ -230,19 +231,20 @@ class TpchQ19AutoPart(
     val preThreadsStr = s"_${preThreads}prth"
     val postThreadsStr = s"_${postThreads}psth"
     val subBitsStr = s"_${subBits}sb"
+    val arrayStr = if (array) "_array" else ""
     val allStr = if (partAll) "all" else "single"
     s"q19part$allStr$threadsStr$useHashStr$nbitsStr$subBitsStr$slotsStr$compactStr" +
       s"$buildPartitionedStr$earlyMatTableStr$earlyMatStr$inlineStr$twoSideStr" +
-      s"$threadLocalStr$preThreadsStr$postThreadsStr"
+      s"$threadLocalStr$preThreadsStr$postThreadsStr$arrayStr"
   }
 
   import ressort.hi.meta._
   import ressort.hi.meta.MetaParam._
-  val totalBits = new ParamList[Expr](List(Log2Up(Length('part)) - subBits))
+  val totalBits = new ParamList[Expr](List(Log2Up(Length('part)) - (if (array) 0 else subBits)))
   val joinBits = new ExprParam(totalBits, e => e - partBits)
   val joinMsb = new ExprParam(totalBits, e => e - partBits - Const(1))
   val partMsb = new ExprParam(totalBits, e => e - Const(1))
-  val width = if (useHash) 64 else 0
+  val width = if (useHash && !array) 64 else 0
   val partHash = HashConfig(bits = partBits, msb = partMsb, width = width)
   val joinHash = HashConfig(bits = joinBits, msb = joinMsb, width = width)
 
@@ -279,6 +281,9 @@ class TpchQ19AutoPart(
       if (!blockBuild) table = table.rename()
     }
     var values = if (earlyMatTable) table.rename() else table
+    if (array && !buildPartitioned)
+      table = table.prepend('valid -> True)
+
 
     var join: MetaOp = litem.withParams(totalBits)
 
@@ -300,6 +305,7 @@ class TpchQ19AutoPart(
 
     join = join
       .equiJoin(table, 'l_partkey,'p_partkey)
+        .withOverflow(!array, array)
         .withHash(joinHash)
         .withCompactTable(compact)
         .withInlineCounter(inline)
