@@ -146,7 +146,8 @@ sealed trait MetaOp {
       def walk(o: MetaOp, inUse: Seq[Id]): Unit = {
         fmap(o.id) = fmap.getOrElse(o.id, Seq()) ++ inUse.filter(o.fields.contains)
         val nextFields = o match {
-          case r: Rename if r.keepInput => r.usedFields ++ r.in.fields.filter(inUse.contains(_))
+          case r: Rename if r.keepInput => 
+          r.usedFields ++ r.in.fields.filter(inUse.contains(_))
           case r: Rename => r.usedFields
           case _ => o.usedFields ++ inUse.filter(!o.usedFields.contains(_))
         }
@@ -161,6 +162,15 @@ sealed trait MetaOp {
       newOp match {
         case r: Rename if r.renames.isEmpty =>
           r.copy(renames = usedFields(r.id).toSeq.map(f => f->f))
+        case r: Rename if r.keepInput =>
+          val fromInput = usedFields(r.id).toSeq.map(f => f->f)
+          var renames = Seq[(Id, Expr)]()
+          if (!r.prepend) 
+            renames ++= fromInput.filter(p => !r.renames.map(_._1).contains(p._1))
+          renames ++= r.renames.filter(p => usedFields(r.id).contains(p._1))
+          if (r.prepend)
+            renames ++= fromInput.filter(p => !renames.map(_._1).contains(p._1))
+          r.copy(renames = renames, keepInput=false)
         case r: Rename =>
           r.copy(renames = r.renames.filter(p => usedFields(r.id).contains(p._1)))
         case j: EquiJoin =>
@@ -656,7 +666,6 @@ case class Rename(
     name: Option[ProgSym]=None,
     id: MetaOpId=new MetaOpId())
   extends MetaOp {
-
   lazy val fields: Seq[Id] = {
     var f = Seq[Id]()
     if (keepInput && !prepend) f ++= in.fields ++ renames.map(_._1)
