@@ -321,9 +321,8 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
             onePerSlice=true,
             inlineCounter=o.inlineCounter)
       } else {
-        println(s"buckets $buckets * slots $slots * deep slices ${recInput.deepNumSlices}")
         val nelems = buckets * slots * recInput.deepNumSlices
-        var (arr, allocs) = recInput.clone(name(op, "htbl"), length = nelems)
+        var (arr, allocs) = recInput.cloneFixedLengthSlices(name(op, "htbl"), recInput.buffer.recType, length = nelems)
         if (o.implicitMask) {
           val zero = arr.buffer.recType.toRecord.fields.head.loType.zero
           arr.buffer.initializer = Some(lo.UField(_, 0) := zero)
