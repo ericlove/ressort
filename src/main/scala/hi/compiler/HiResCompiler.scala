@@ -34,11 +34,11 @@ class HiResCompiler(
 }
 
 class HiResCompilation(
-      config: CompilerConfig,
-      hiOp: hi.Operator,
-      funcType: hi.Func,
-      verbose: Boolean,
-      name: Option[String]=None) {
+      val config: CompilerConfig,
+      val hiOp: hi.Operator,
+      val funcType: hi.Func,
+      val verbose: Boolean,
+      val name: Option[String]=None) {
 
   import HiResCompiler._
   val tempIds = new TempIds("r_")
@@ -76,7 +76,7 @@ class HiResCompilation(
       println("")
     }
 
-    val initialDag = HiDag(hiOp, arrayGenerator)
+    val initialDag = HiDag(hiOp, this)
     if (verbose) {
       println("######## INITIAL Dag PHASE ########")
       initialDag.print()
@@ -105,7 +105,6 @@ class HiResCompilation(
       loArrayDag.print()
       println("################################\n\n")
     }
-    ///???
 
     val elaboratedDag = ElaboratedDag(loArrayDag, config)
     val scheduledDag = scheduleDag(elaboratedDag)
@@ -250,8 +249,6 @@ class HiResCompilation(
         },
         Some(outType))
     }
-
-//    println("FINAL Lo CODE: \n"+op.tabStr(3))
 
     op
   }

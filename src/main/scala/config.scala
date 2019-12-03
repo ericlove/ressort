@@ -18,12 +18,16 @@ case class RadixPartConfig(
   linesz:           Int=64)
 
 case class CompilerConfig(
-  isort:         InsertionSortConfig,
-  rpart:         RadixPartConfig,
-  initBuffers:   Boolean,
-  addRestrict:   Boolean,
-  arrayFusion:   Boolean,
-  vectorFusion:  Boolean
+  isort:          InsertionSortConfig,
+  rpart:          RadixPartConfig,
+  initBuffers:    Boolean,
+  addRestrict:    Boolean,
+  arrayFusion:    Boolean,
+  vectorFusion:   Boolean,
+  blockingJoin:   Boolean,
+  cse:            Boolean,
+  constProp:      Boolean,
+  unpackStructs:  Boolean
 )
 
 object CompilerConfig {
@@ -33,6 +37,10 @@ object CompilerConfig {
       addRestrict   = false,
       arrayFusion   = true,
       vectorFusion  = true,
+      blockingJoin  = false,
+      cse           = true,
+      constProp     = true,
+      unpackStructs = true,
       isort         = InsertionSortConfig(),
       rpart         = RadixPartConfig())
   }

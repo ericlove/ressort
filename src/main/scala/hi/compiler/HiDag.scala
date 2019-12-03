@@ -79,8 +79,8 @@ object HiDag {
     private val ids = new lo.TempIds("_cur_")
   }
 
-  def apply(op: hi.TypedHiResOp, arrayGenerator: OutputArrayGenerator): HiDag = {
-    val builder = new HiDagBuilder(arrayGenerator)
+  def apply(op: hi.TypedHiResOp, compilation: HiResCompilation): HiDag = {
+    val builder = new HiDagBuilder(compilation)
     val dag = builder.getDag(op)
     dag.fillBackwardEdges()
     dag
@@ -197,7 +197,7 @@ object HiDagTransform {
 /** Constructs an [[OpDag]] of [[HiArrayOp]]s from an [[hi.Operator]]
   * expression.
   */
-class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
+class HiDagBuilder(compilation: HiResCompilation) {
   private object NodeId {
 
     private var next = 0
@@ -207,6 +207,8 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
       next
     }
   }
+
+  private val arrayGenerator = compilation.arrayGenerator
 
   /** Main method to construct an `OpDag` from an `Operator` */
   def getDag(op: hi.TypedHiResOp, idMap: Map[hi.Id, HiDag]=Map()): HiDag = {
@@ -363,6 +365,7 @@ class HiDagBuilder(arrayGenerator: OutputArrayGenerator) {
         HiArrayOp(
           materialInputs = inputs.map(_ => false),
           arrayInputs = List(false, o.parallel, false),
+          blockingOutput = compilation.config.blockingJoin,
           typed = typedOp.copy(o = newOp),
           controlsOutputCursor = true,
           controlsChunkCursor = true)

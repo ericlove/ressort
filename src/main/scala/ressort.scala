@@ -13,7 +13,7 @@ object Ressort {
       verbose:      Boolean=false,
       name:         Option[String]=None): CppCode = {
     val fc = new HiResCompiler()(config)
-    val trans = OmpTranslator()
+    val trans = OmpTranslator(config)
 
     val lo = fc.compile(operator, funcType, verbose, name)
     val ccCode = trans.translate(lo)

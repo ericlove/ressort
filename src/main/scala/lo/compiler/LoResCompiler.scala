@@ -2,13 +2,14 @@
 package ressort.lo.compiler
 import ressort.compiler.cpp
 import ressort.compiler.CppCode
+import ressort.compiler.CompilerConfig
 import ressort.hi.compiler.HiResCompiler.CompiledLoRes
 import ressort.lo.compiler._
 import ressort.lo
 import ressort.lo.TypedLoAst
 import ressort.hi
 import ressort.util._
-import scala.collection.mutable.LinkedHashMap
+import scala.collection.mutable.{ArrayBuffer, LinkedHashMap}
 
 
 /** Converts intermediate LoRes code into C++ code for final compilation.
@@ -27,9 +28,10 @@ import scala.collection.mutable.LinkedHashMap
   *                       Invoked after all `LoRes`-level transformations applied.
   */
 class LoResCompiler(
+    val transforms: Seq[lo.TypedLoAst => lo.TypedLoAst] =
+      LoResCompiler.defaultTransforms(CompilerConfig.DefaultConfig),
     val globalHeaders: Seq[String] = LoResCompiler.defaultGlobalHeaders,
     val localHeaders: Seq[String] = LoResCompiler.defaultLocalHeaders,
-    val transforms: Seq[lo.TypedLoAst => lo.TypedLoAst] = LoResCompiler.defaultTransforms,
     val irAstToCppAst: LoAstToCppAst = LoResCompiler.defaultLoAstToCppAst) {
 
   /** Method that clients should call to obtain C++ code for supplied LoRes */
@@ -183,25 +185,38 @@ object LoResCompiler {
     println()
     typed
   }
-  val defaultTransforms: List[lo.TypedLoAst => lo.TypedLoAst] = {
-    List(
-      RecGroupEliminator(_), // mandatory
-      RecStructs(_), // mandatory
-      UnpackScalarStructs(_),
-      UnpackScalarStructs(_),
-      DeadCodeEliminator(_),
-      StaticSingleAssignment(_),
-      PropagateConstants(_),
-      DeadCodeEliminator(_),
+
+  def defaultTransforms(config: CompilerConfig): List[lo.TypedLoAst => lo.TypedLoAst] = {
+    val xforms = ArrayBuffer[lo.TypedLoAst => lo.TypedLoAst]()
+
+    xforms += ((a: lo.TypedLoAst) => RecGroupEliminator(a)) // mandatory
+    xforms += ((a: lo.TypedLoAst) => RecStructs(a)) // mandatory
+
+    if (config.unpackStructs) xforms += ((a: lo.TypedLoAst) => UnpackScalarStructs(a))
+
+    xforms += ((a: lo.TypedLoAst) => DeadCodeEliminator(a))
+
+    xforms += ((a: lo.TypedLoAst) => StaticSingleAssignment(a))
+    if (config.cse) {
+
+      if (config.constProp) xforms += ((a: lo.TypedLoAst) => PropagateConstants(a))
+
+      xforms += ((a: lo.TypedLoAst) => DeadCodeEliminator(a))
       // Okay to const-prop inside Phi() after DCE, but not before
-      CommonSubExpressions(_),
-      PropagateConstants(_, true),
-      StaticSingleAssignment.collapse(_),
-      // Remove `UseSym`s because this is the final DCE
-      DeadCodeEliminator(_, true),
-      RemoveUnusedPointers(_),
-      MergeCommonPredicates(_),
-      UniqueSymbolNames(_))
+      xforms += ((a: lo.TypedLoAst) => CommonSubExpressions(a))
+
+      if (config.constProp) xforms += ((a: lo.TypedLoAst) => PropagateConstants(a, true))
+
+    }
+    xforms += ((a: lo.TypedLoAst) => StaticSingleAssignment.collapse(a))
+
+    // Remove `UseSym`s because this is the final DCE
+    xforms += ((a: lo.TypedLoAst) => DeadCodeEliminator(a, true))
+    xforms += ((a: lo.TypedLoAst) => RemoveUnusedPointers(a))
+    xforms += ((a: lo.TypedLoAst) => MergeCommonPredicates(a))
+    xforms += ((a: lo.TypedLoAst) => UniqueSymbolNames(a))
+
+    xforms.toList
   }
 
   /** Separate all [[StructDec]]s from the top of C++ code so they

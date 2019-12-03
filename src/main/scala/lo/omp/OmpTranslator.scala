@@ -1,5 +1,6 @@
 // See LICENSE.txt
 package ressort.lo.compiler
+import ressort.compiler.CompilerConfig
 import ressort.lo
 import ressort.compiler.cpp._
 
@@ -16,10 +17,11 @@ object OmpTranslator  {
 
   val ompTransforms = List(annotationTransform(_))
 
-  def apply(): LoResCompiler = {
+  def apply(config: CompilerConfig): LoResCompiler = {
+    
     new LoResCompiler(
       globalHeaders = LoResCompiler.defaultGlobalHeaders ++ ompGlobalHeaders,
-      transforms = LoResCompiler.defaultTransforms ++ ompTransforms,
+      transforms = LoResCompiler.defaultTransforms(config) ++ ompTransforms,
       irAstToCppAst = ompLoAstToCppAst)
   }
 
