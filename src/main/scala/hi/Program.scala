@@ -7,6 +7,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap}
 sealed trait ProgSym {
   def id: Id
   def :=(o: Operator): Unit
+  def :=(o: Operator, fields: Seq[Id]): Unit
   def :=(o: MetaOp): Unit
   //def apply(e: Expr): Operator
   def metaOp: Option[MetaOp]
@@ -50,15 +51,17 @@ class Program {
   private class MySym(val id: Id) extends ProgSym {
     var metaOp: Option[MetaOp] = None
 
-    def :=(o: Operator): Unit = {
+    def :=(o: Operator, fields: Seq[Id]): Unit = {
       o match {
         case i: IdOp =>
           assigns += Assign(i.id, IdOp(i.id))
         case _ =>
       }
       assigns += Assign(id, o)
-      metaOp = Some(Concrete(o, Seq(), name = Some(this)))
+      metaOp = Some(Concrete(o, fields, name = Some(this)))
     }
+
+    def :=(o: Operator): Unit = { this := (o, Seq[Id]()) }
 
     def :=(o: MetaOp): Unit = {
       if (concrete.contains(o.id)) {

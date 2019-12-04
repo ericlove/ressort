@@ -405,7 +405,7 @@ case class HashPartition(
     hist := Offsets(hist, depth = (if (config.parallel) 1 else 0))
     if (config.block) {
       hist := Cat(in, hist)
-      in := Uncat(hist, 0)
+      in := (Uncat(hist, 0), fields)
       hist := Uncat(hist, 1)
     }
     p.rename(this.in.id, in)
