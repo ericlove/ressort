@@ -119,6 +119,10 @@ case class TpchQ19AutoNopa(
     earlyMat: Boolean=true,
     inline: Boolean=false,
     compact: Boolean=false,
+    collect: Boolean=false,
+    cracked: Boolean=false,
+    crackedInner: Boolean=false,
+    collectInner: Boolean=false,
     array: Boolean=true
   ) extends TpchQ19(tpch) with Q19Auto {
   import ressort.hi.meta._
@@ -133,7 +137,13 @@ case class TpchQ19AutoNopa(
     val buildPartitionedStr = if (buildPartitioned) "_bpart" else ""
     val inlineStr = if (inline) "_inline" else ""
     val arrayStr = if (array) "_array" else ""
-    s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr$earlyMatStr$inlineStr$blockBuildStr$arrayStr"
+    val crackedStr = if (cracked) "_cracked" else ""
+    val crackedInnerStr = if (crackedInner) "_crackedInner" else ""
+    val collectStr = if (collect) "_coll" else ""
+    val collectInnerStr = if (collectInner) "_collInner" else ""
+    s"q19nopa$threadsStr$useHashStr$slotsStr$compactStr$buildPartitionedStr" +
+      s"$earlyMatStr$inlineStr$blockBuildStr$arrayStr" +
+      s"$crackedStr$crackedInnerStr$collectStr$collectInnerStr"
   }
 
   val totalBits = new ParamList[Expr](List(Log2Up(Length('part)/slots)))
@@ -159,11 +169,25 @@ case class TpchQ19AutoNopa(
 
     join = join
       .splitPar(threads)
+
+    if (collect && !cracked && !crackedInner)
+      join = join.rename()
+
+    join = join
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
-      .asIncomplete
-      .rename()
+        .withCracked(crackedInner)
+        .withCollect(collectInner)
+        .asIncomplete
+
+    if (!collect)
+      join = join.asInstanceOf[Filter].rename()
+    else if (cracked && collect)
+      join = join.rename().connector(o => Collect(o))
+    else if (!cracked && collect)
+      join = join.connector(o => Collect(o))
+
 
     join = join
       .equiJoin(table, 'l_partkey, 'p_partkey)
@@ -200,6 +224,10 @@ class TpchQ19AutoPart(
     val postThreads: Int=0,
     val slots: Int=1,
     val compact: Boolean=false,
+    val collect: Boolean=false,
+    val cracked: Boolean=false,
+    val collectInner: Boolean=false,
+    val crackedInner: Boolean=false,
     val earlyMatTable: Boolean=true,
     val earlyMat: Boolean=true,
     val buildPartitioned: Boolean=false,
@@ -233,9 +261,14 @@ class TpchQ19AutoPart(
     val subBitsStr = s"_${subBits}sb"
     val arrayStr = if (array) "_array" else ""
     val allStr = if (partAll) "all" else "single"
+    val crackedStr = if (cracked) "_cracked" else ""
+    val crackedInnerStr = if (crackedInner) "_crackedInner" else ""
+    val collectStr = if (collect) "_coll" else ""
+    val collectInnerStr = if (collectInner) "_collInner" else ""
     s"q19part$allStr$threadsStr$useHashStr$nbitsStr$subBitsStr$slotsStr$compactStr" +
       s"$buildPartitionedStr$earlyMatTableStr$earlyMatStr$inlineStr$twoSideStr" +
-      s"$threadLocalStr$preThreadsStr$postThreadsStr$arrayStr"
+      s"$threadLocalStr$preThreadsStr$postThreadsStr$arrayStr" +
+      s"$crackedStr$crackedInnerStr$collectStr$collectInnerStr"
   }
 
   import ressort.hi.meta._
@@ -291,10 +324,27 @@ class TpchQ19AutoPart(
       .splitSeq(preThreads)
       .splitPar(threads)
       .splitSeq(postThreads)
+
+    if (collect && !cracked && !crackedInner)
+      join = join.rename()
+
+
+    join = join
       .filter(
         ('l_shipinstruct === TpchSchema.DELIVER_IN_PERSON),
         ('l_shipmode === TpchSchema.AIR || 'l_shipmode === TpchSchema.AIR_REG))
-      .asIncomplete
+        .withCracked(crackedInner)
+        .withCollect(collectInner)
+        .asIncomplete
+
+    if (!collect)
+      join = join.asInstanceOf[Filter].rename()
+    else if (cracked && collect)
+      join = join.rename().connector(o => Collect(o))
+    else if (!cracked && collect)
+      join = join.connector(o => Collect(o))
+
+    join = join
       .partition('l_partkey, renamed = (if (partAll) Some(_.rename()) else None))
         .withHash(partHash)
         .withParallel(threads > 1 && !threadLocal)
