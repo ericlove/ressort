@@ -49,66 +49,7 @@ object CompilerTest {
   lazy val q19tests =
     List(
       new TpchQ19AutoNopa(Some(tpch)),
-      new TpchQ19Nopa(Some(tpch)),
-      new TpchQ19PartAll(Some(tpch), nbits=lbits, earlyMat=false),
-      new TpchQ19PartSingle(Some(tpch), nbits=lbits, blockLitem=false),
-      new TpchQ19PartSingle(Some(tpch), nbits=lbits, blockLitem=true),
-      new TpchQ19PartSingle(Some(tpch), nbits=lbits, blockLitem=true, threads=10),
-      new TpchQ19PartAll(Some(tpch), nbits=lbits, earlyMat=true))
-
-  lazy val q19nopaTests = {
-    val tf = List(true, false)
-    val threadList = List(0, 12)
-    for {
-      threads <- threadList
-      cat <- tf
-      useHash <- tf
-      compact <- tf
-      earlyMat <- tf
-      buildPartitioned <- tf
-      inline <- tf
-      slots <- List(1,4)
-    } yield {
-      val ehb = if (useHash) Some(0) else None
-      new TpchQ19Nopa(
-        Some(tpch),
-        threads=threads,
-        cat=cat,
-        extraHashBits=ehb,
-        compact=compact,
-        earlyMat=earlyMat,
-        buildPartitioned=buildPartitioned,
-        slots=slots)
-    }
-  }
-
-  lazy val q19partAllTests = {
-    val tf = List(true, false)
-    val threadList = List(0, 12)
-    for {
-      threads <- threadList
-      useHash <- tf
-      compact <- tf
-      earlyMat <- tf
-      earlyMatPart <- tf
-      buildPartitioned <- tf
-      inline <- tf
-      slots <- List(4)
-    } yield {
-      val ehb = if (useHash) Some(0) else None
-      new TpchQ19PartAll(
-        Some(tpch),
-        nbits=6,
-        threads=threads,
-        extraHashBits=ehb,
-        slots=slots,
-        compact=compact,
-        earlyMatPart=earlyMatPart,
-        earlyMat=earlyMat,
-        buildPartitioned=buildPartitioned,
-        inline=inline)
-    }
-  }
+      new TpchQ19AutoPart(Some(tpch), partBits=lbits, partAll=true))
 
   lazy val q06tests =
     List(
@@ -134,9 +75,6 @@ class TpchQ06CollectTest extends CompilerTest(new TpchQ06(threads=8, crack=true,
 
 class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.smallTpch) :: Nil)
 
-class TpchQ19NopaTest extends CompilerTest(new TpchQ19Nopa(Some(CompilerTest.tpch)) ::Nil)
-class AllTpchQ19NopaTests extends CompilerTest(CompilerTest.q19nopaTests)
-class AllTpchQ19PartAllTests extends CompilerTest(CompilerTest.q19partAllTests)
 class TpchQ19AutoNopaTest extends CompilerTest(new TpchQ19AutoNopa(Some(CompilerTest.tpch)) :: Nil)
 class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPart(Some(CompilerTest.tpch), partBits=CompilerTest.lbits, partAll=true) :: Nil)
 class TpchQ19AutoPartSingleTest extends CompilerTest(new TpchQ19AutoPart(Some(CompilerTest.tpch), partBits=CompilerTest.lbits, partAll=false) :: Nil)
