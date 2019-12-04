@@ -27,6 +27,8 @@ private class PropagateConstants(typed: TypedLoAst, replaceInsidePhi: Boolean) {
       case Neg(Const(n)) => Const(-n)
       case Div(c1: ConstExpr, c2: ConstExpr) => c1/c2
       case Div(e, Const(1)) => e
+      case Div(e1, e2) if e1 == e2 => Const(1)
+      case Mod(e1, e2) if e1 == e2 => Const(0)
       case Mod(Const(c1), Const(c2)) => Const(c1%c2)
       case Pow2(Const(c)) => Const(1L << c)
       case Log2Up(Const(c)) => Const(math.ceil(math.log(c)/math.log(2.0)).toInt)
