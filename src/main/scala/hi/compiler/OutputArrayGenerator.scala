@@ -24,6 +24,7 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
       name = MetaArray.tempIds.newId("mask"),
       recType = lo.Bool(),
       length = array.cloneBufferLength,
+      disjoint = array.buffer.disjoint,
       numValid = array.buffer.numValid)
   }
 
@@ -388,6 +389,7 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
               // Special case required to handle conversion of disjoint to contiguous:
               // (this only happens in [[Compact]] and [[Partition]]
               d.buffer.allocate = true // Disjoint buffers aren't allocated; so reset
+              d.buffer.disjoint = false // Also no longer disjoint, so must manually reset
               FlatArray(d.buffer, d.mask)
             }
             case f: FlatArray => f

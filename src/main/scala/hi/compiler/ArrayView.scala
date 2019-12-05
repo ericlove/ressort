@@ -293,9 +293,11 @@ object ChunkViewState {
 
 case class DisjointSliceViewState(
     ptr: SymLike,
+    maskPtr: SymLike,
     ptrVecLen: SymLike,
     index: SymLike,
     offset: SymLike,
+    maskOffset: SymLike,
     ptrOffset: SymLike,
     avgPhysVecLen: SymLike,
     physVecLen: SymLike,
@@ -304,7 +306,7 @@ case class DisjointSliceViewState(
     numArrays: SymLike)
   extends NestedViewState {
 
-  def localIds: Seq[SymLike] = Seq(ptr, index, offset, physVecLen, logVecLen)
+  def localIds: Seq[SymLike] = Seq(ptr, maskPtr, index, offset, physVecLen, logVecLen)
   def globalState: Seq[SymLike] = Seq(ptrVecLen, avgPhysVecLen, remainder, numArrays)
 }
 
@@ -313,9 +315,11 @@ object DisjointSliceViewState {
   def apply(ids: TempIds): DisjointSliceViewState = {
   DisjointSliceViewState(
       ptr = ids.newId("ptr"),
+      maskPtr = ids.newId("mask_ptr"),
       ptrVecLen = ids.newId("ptr_vec_len"),
       index = ids.newId("idx"),
       offset = ids.newId("off"),
+      maskOffset = ids.newId("mask_off"),
       ptrOffset = ids.newId("ptr_off"),
       avgPhysVecLen = ids.newId("avg_len"),
       physVecLen = ids.newId("pvl"),
@@ -350,7 +354,7 @@ abstract class StatefulNestedView(state: NestedViewState) extends NestedView wit
 
   def maxCursor = numValid.map(_.access(0)).getOrElse(logVecLen)
 
-  def offset = state.offset
+  def offset: Expr = state.offset
 
   def numArrays = state.numArrays
 
@@ -379,4 +383,31 @@ abstract class WrapperView(val orig: ArrayView) extends ArrayView {
   override def endLocalState: LoAst = orig.endLocalState
   override def resetLocalState: LoAst = orig.resetLocalState
   override def windowLoop(body: LoAst, cursor: Option[SymLike]=None): LoAst = orig.windowLoop(body, cursor)
+}
+
+/** Implements mask-related methods for non-nested array views */
+trait FlatMask { this: ArrayView =>
+   private def mask(n: Expr): Option[LValue] = {
+    array.mask.map { a => 
+      val base = if (a.immaterial) a.name else Deref(a.name).sub(n)
+      if (a.implicitMask)
+        UField(base, 0)
+      else
+        base
+    }
+  }
+  private def maskCast(e: Expr): Expr = {
+    if (Bool().accepts(array.mask.get.recType))
+      e
+    else
+      Cast(e, Bool())
+  }
+  def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
+  def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
+  def setMask(n: Expr, value: Expr): LoAst =  {
+    mask(n)
+      .map(l => (l := maskCast(value)))
+      .getOrElse(Nop)
+  }
+  def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value) 
 }

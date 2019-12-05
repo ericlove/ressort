@@ -24,6 +24,8 @@ object MetaArray {
   * @param allocate     Should the allocator make a new buffer for this?
   * @param implicitMask The first field of each record should be treated as a mask, with
   *                       any non-zero value considered to be valid.
+  * @param disjoint This buffer is the base of a disjoint array, and as such never
+  *                   physically is allocated.
   * @param immaterial   If this buffer is allocated, allocate only a single
   *                     element for in-register use.
   * @param dynamicSize Indicates that this buffer's allocation must be scheduled based
@@ -42,6 +44,7 @@ class Buffer(
     var finalizer: Option[LValue => LoAst] = None,
     var allocate: Boolean = true,
     var implicitMask: Boolean = false,
+    var disjoint: Boolean = false,
     var immaterial: Boolean = false,
     var dynamicSize: Boolean = false,
     var mustMaterialize: Boolean = false) {
@@ -414,7 +417,7 @@ object FlatArray {
         array: FlatArray,
         cursor: Option[SymLike]=None,
         isOutput: Boolean=false)
-      extends ArrayView with ParallelView {
+      extends ArrayView with ParallelView with FlatMask {
     override def toString: String = {
       val maskStr = readMask(0).getOrElse("")
       s"FlatView[$cursor](${array.buffer.name}, length = ${array.length} $maskStr"
@@ -425,20 +428,7 @@ object FlatArray {
     def access(n: Expr): LValue = {
       if (array.buffer.immaterial) { array.buffer.name } else { Deref(array.buffer.name).sub(n) }
     }
-    private def mask(n: Expr): Option[LValue] = {
-      array.mask.map { a => 
-        val base = if (a.immaterial) a.name else Deref(a.name).sub(n)
-        if (a.implicitMask)
-          UField(base, 0)
-        else
-          base
-      }
-    }
-    private def maskCast(e: Expr): Expr = if (Bool().accepts(array.mask.get.recType)) e else Cast(e, Bool())
-    def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
-    def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
-    def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)
-    def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value)
+
     def absolute(n: Expr): LValue = access(n)
     def accessNumValid: Option[LValue] = if (array.buffer.scalar) None else array.buffer.numValid
     def physVecLen: Expr = array.buffer.length
@@ -853,6 +843,8 @@ object DisjointArray {
   trait View { this: ArrayView =>
     def absolutePointer(n: Expr): LValue
 
+    def absoluteMaskPointer(n: Expr): Option[LValue]
+
     def ptrVecLen: Expr
 
     def ptrOffset: Expr
@@ -902,6 +894,7 @@ object DisjointArray {
           pointers.mustMaterialize = false
           pointers.initializer = Some(arr.initPointers(_))
           buffer.allocate = false
+          buffer.disjoint = true
           (arr, buffer :: pointers :: Nil)
         }
       }
@@ -1053,11 +1046,21 @@ object DisjointSlice {
       }
 
       val alloc = if (array.allocFromNumValid) {
+        def alloc(ptr: LValue): LoAst = {
+          If(Equal(ptr, Null),
+            HeapAlloc(Deref(ptr), numValid.get.access(n)))
+        }
         val ptr = base.absolutePointer(state.ptrOffset)
-        If(Equal(ptr, Null),
-          HeapAlloc(Deref(ptr), numValid.get.access(n)))
+        val maskPtr = base.absoluteMaskPointer(state.ptrOffset)
+        alloc(ptr) + maskPtr.map(alloc).getOrElse(Nop)
       } else {
         Nop
+      }
+
+      val maskPtr: LoAst = absoluteMaskPointer(state.ptrOffset) match {
+        case Some(mp) =>
+          (state.maskPtr := (Ptr(Arr(array.mask.get.recType)), mp))
+        case _ => Nop
       }
 
       if (array.shell) {
@@ -1077,10 +1080,17 @@ object DisjointSlice {
           (state.offset :=
               (Index(true),
                   base.offset +
-                      Mux(n > 0, offset + state.remainder, offset))) + //TODO FIX 
+                      Mux(n > 0, offset + state.remainder, offset))) +
           (state.ptrOffset := (Index(true), base.ptrOffset + state.ptrVecLen * Safe(n))) +
+          (state.maskOffset := (Index(true), {
+            if (array.mask.map(_.disjoint).getOrElse(false))
+              Const(0)
+            else
+              state.offset
+          } )) +
           alloc +
           (state.ptr := (Ptr(Arr(array.recType)), base.absolutePointer(state.ptrOffset))) +
+          maskPtr +
           (UseSym(absolutePointer(0).root, state.ptr))
     }
 
@@ -1097,17 +1107,48 @@ object DisjointSlice {
         Deref(state.ptr).sub(n)
     }
 
+    override def offset: Expr = Const(0)
+
     override def absolute(n: Expr) = access(n)
 
-    override def readMask(n: Expr) = base.readMaskAbsolute(state.offset + n) // TODO FIX
+    private def mask(n: Expr): Option[LValue] = {
+      array.mask.map { buf =>
+        val base = {
+          if (buf.immaterial)
+            buf.name
+          else if (buf.disjoint)
+            Deref(state.maskPtr).sub(n)
+          else
+            Deref(buf.name).sub(n)
+        }
+        if (buf.implicitMask)
+          UField(base, 0)
+        else
+          base
+      }
+    }
 
-    override def setMask(n: Expr, value: Expr) = base.setMaskAbsolute(state.offset + n, value) // TODO FIX
+    private def maskCast(e: Expr): Expr = {
+      if (Bool().accepts(array.mask.get.recType))
+        e
+      else
+        Cast(e, Bool())
+    }
 
-    override def readMaskAbsolute(n: Expr) = base.readMaskAbsolute(state.offset + n) // TODO FIX
+    override def readMask(n: Expr) = mask(state.maskOffset + n).map(maskCast)
 
-    override def setMaskAbsolute(n: Expr, value: Expr) = base.setMaskAbsolute(state.offset + n, value) // TODO FIX
+    override def setMaskAbsolute(n: Expr, value: Expr) = {
+      mask(n)
+        .map(l => (l := maskCast(value)))
+        .getOrElse(Nop)
+    }
+    override def readMaskAbsolute(n: Expr) = mask(n).map(maskCast)
+
+    override def setMask(n: Expr, value: Expr) = setMaskAbsolute(state.maskOffset + n, value)
 
     def absolutePointer(n: Expr): LValue = base.absolutePointer(n)
+
+    def absoluteMaskPointer(n: Expr): Option[LValue] = base.absoluteMaskPointer(n)
 
     def ptrOffset = state.ptrOffset
 
@@ -1124,6 +1165,7 @@ case class DisjointBase(
     pointers: Buffer,
     slices: Expr,
     mask: Option[Buffer]=None,
+    maskPointers: Option[Buffer]=None,
     initPointersNull: Boolean=false)
   extends MetaArray with DisjointArray {
 
@@ -1146,7 +1188,9 @@ case class DisjointBase(
     FlatArray(buffer, mask).ancillary(recType, length, name)
   }
 
-  override def buffers: Set[Buffer] = (buffer :: pointers :: mask.toList).toSet
+  override def buffers: Set[Buffer] = {
+    List(Some(buffer), maskPointers, Some(pointers), mask).flatten.toSet
+  }
 
   def clone(
       name: SymLike,
@@ -1190,7 +1234,8 @@ case class DisjointBase(
 
   def assignToStruct(lv: LValue): LoAst = {
     (lv.dot('ptrs) := pointers.name) +
-    mask.map(m => (lv.dot('mask) := m.name)).getOrElse(Nop)
+    mask.map(m => (lv.dot('mask) := m.name)).getOrElse(Nop) +
+    maskPointers.map(mp => (lv.dot('mask_ptrs) := mp.name)).getOrElse(Nop)
   }
 
   def mkString(indent: Int): String = {
@@ -1203,8 +1248,11 @@ case class DisjointBase(
 
   def struct: Struct = {
     val fields = {
-      val base = List(Id("ptrs") -> Ptr(Arr(pointers.recType)))
-      mask.map(m => base ++ Map(Id("mask") -> Ptr(Arr(m.recType)))).getOrElse(base)
+      List(
+        Some(Id("ptrs") -> Ptr(Arr(pointers.recType))),
+        mask.map(m => (Id("mask") -> Ptr(Arr(m.recType)))),
+        maskPointers.map(mp => Id("mask_ptrs") -> Ptr(Arr(mp.recType))))
+      .flatten
     }
     Struct(
       name = Id(s"_lo_djbase_${buffer.recType.mangledName}"),
@@ -1221,7 +1269,7 @@ object DisjointBase {
       array: DisjointBase,
       cursor: Option[SymLike]=None,
       isOutput: Boolean=false)
-    extends ArrayView with ParallelView with DisjointArray.View {
+    extends ArrayView with ParallelView with DisjointArray.View with FlatMask {
     private def err = 
       throw new Error(s"Shouldn't be accessing a disjoint base array directly: "+this) 
     override def toString: String = {
@@ -1232,21 +1280,7 @@ object DisjointBase {
     def globalState = Nop
     def localState(n: Expr) = Nop
     def access(n: Expr): LValue = err
-    private def maskBuffer = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
-    private def mask(n: Expr): Option[LValue] = {
-      maskBuffer.map { a => 
-        val base = if (array.buffer.immaterial) a.name else Deref(a.name).sub(n)
-        if (array.buffer.implicitMask)
-          UField(base, 0)
-        else
-          base
-      }
-    }
-    private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
-    def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
-    def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
-    def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)
-    def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value)
+
 
     def absolute(n: Expr): LValue = err
     def accessNumValid: Option[LValue] = if (array.buffer.scalar) None else array.buffer.numValid
@@ -1258,6 +1292,9 @@ object DisjointBase {
     def ancillaries: List[ArrayView] = Nil
 
     def absolutePointer(n: Expr): LValue = Deref(array.pointers.name).sub(n)
+    def absoluteMaskPointer(n: Expr): Option[LValue] = {
+      array.maskPointers.map(mp => Deref(mp.name).sub(n))
+    }
 
     def ptrOffset: Expr = Const(0)
     def ptrVecLen: Expr = array.pointers.length
@@ -1653,7 +1690,10 @@ object ChunkArray {
       state: ChunkViewState,
       cursor: Option[SymLike],
       inlineCounterBase: ChunkArray.View)
-    extends NestedView with SequentialView with ParallelMacroView {
+    extends NestedView with SequentialView with ParallelMacroView with FlatMask {
+    // TODO: need to make a chunk view that can contain material masks;
+    // For now, just allow in immaterial form, which enough to get to a compaction
+    assert(array.mask.isEmpty || array.buffer.immaterial || array.buffer.implicitMask)
 
     override def toString: String = {
       s"ChunkView[$cursor](${state.offset}, ${state.numArrays}, ${state.maxSlot})"
@@ -1915,23 +1955,6 @@ object ChunkArray {
     }
 
     def absolute(n: Expr): LValue = access(n)
-
-    private def maskBuffer: Option[Buffer] = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
-    private def mask(n: Expr): Option[LValue] = {
-      val res = maskBuffer.map { a => 
-        val base = if (a.immaterial) a.name else Deref(state.curMask).sub(n)
-        if (a.implicitMask)
-          UField(base, 0)
-        else
-          base
-      }
-      res
-    }
-    private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
-    def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
-    def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
-    def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)
-    def setMaskAbsolute(n: Expr, value: Expr): LoAst = setMask(n, value)
 
     def append: LoAst = {
       if (array.buffer.immaterial)
