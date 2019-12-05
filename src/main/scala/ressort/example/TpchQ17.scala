@@ -28,11 +28,16 @@ import ressort.lo.Record
 	* }}}
 	*/
 class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extends HiResTest {
+  import ressort.hi.meta._
+  import ressort.hi.meta.MetaParam._
   val nbits = (math.log(tpch.litemSize) / math.log(2.0)).toInt + extraBits
   val weaveStr = if (weave > 0) "_weave$weave" else ""
   val name = s"q17_man_${nbits}hb${weaveStr}"
 
   val input = tpch.allocate
+
+  val litem = Concrete('lineitem_, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id))
+  val part = Concrete('part_, TpchSchema.part.s.fields.map(_.name.get.name).map(Id))
 
   val funcType = {
     Func(
@@ -42,10 +47,69 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
       lo.LoFloat())
 	}
 
+  val meta: MetaOp = {
+    var ptable: MetaOp = part
+    var join: MetaOp = litem
+
+    val hash = HashConfig(width = 0, bits = Log2Up(Length('part)))
+
+    ptable = ptable
+      .filter('p_brand === TpchSchema.BRAND23, 'p_container === TpchSchema.MED_BOX)
+      .asIncomplete
+      .rename('p_partkey -> 'p_partkey)
+      .aggregate().copy(groupBy='p_partkey::Nil)
+      .asIncomplete
+
+    join = join
+      .equiJoin(ptable, 'l_partkey, 'p_partkey)
+        .withBuild(false)
+        .withGather(false)
+      .asIncomplete
+      .rename(
+        'l_partkey -> 'l_partkey,
+        'l_quantity -> Cast('l_quantity, lo.LoDouble()),
+        'l_extendedprice -> Cast('l_extendedprice, lo.LoDouble()))
+
+    var ltable: MetaOp = join
+    ltable = ltable
+      .rename(
+        'l_partkey_table -> 'l_partkey,
+        'l_quantity -> 'l_quantity,
+        'count -> DoubleConst(1.0))
+      .aggregate(
+        'l_quantity -> PlusOp,
+        'count -> PlusOp).copy(groupBy = 'l_partkey_table :: Nil)
+      .asIncomplete
+      .rename(
+        'l_partkey_table -> 'l_partkey_table,
+        'avg -> DoubleConst(0.2) * 'l_quantity / 'count)
+
+    join = join
+      .equiJoin(ltable, 'l_partkey, 'l_partkey_table)
+        .withBuild(false)
+        .withGather(false)
+      .filter('l_quantity < 'avg)
+      .asIncomplete
+
+    join = join
+      .aggregate('l_extendedprice -> PlusOp)
+      .rename('avg_yearly -> UField(0) / DoubleConst(7.0))
+
+    join.nestedSumDouble('avg_yearly).cast(UField(0), lo.LoFloat())
+  }
+
+  val hiRes: Operator = {
+    Let(
+      List(
+        'part_ := 'part,
+        'lineitem_ := 'lineitem),
+    in = meta.allOps.head)
+  }
+
   /** In the default query plan for TPC-H Q17, we pre-compute the correlated aggregation
     * sub-query for each `l_partkey` in `lineitem`.
     */
-  val hiRes: Operator = {
+  val oldHiRes: Operator = {
     Let(
       List(
         'lineitem := 'lineitem,

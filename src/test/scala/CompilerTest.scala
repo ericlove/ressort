@@ -73,7 +73,7 @@ class TpchQ06Test extends CompilerTest(new TpchQ06(threads=16, crack=false, tpch
 class TpchQ06CrackTest extends CompilerTest(new TpchQ06(threads=1, crack=true, tpch=Some(CompilerTest.tpch)) :: Nil)
 class TpchQ06CollectTest extends CompilerTest(new TpchQ06(threads=8, crack=true, collect=true, tpch=Some(CompilerTest.tpch)) :: Nil)
 
-class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.smallTpch) :: Nil)
+class TpchQ17Test extends CompilerTest(new TpchQ17(CompilerTest.tpch) :: Nil)
 
 class TpchQ19AutoNopaTest extends CompilerTest(new TpchQ19AutoNopa(Some(CompilerTest.tpch)) :: Nil)
 class TpchQ19AutoPartAllTest extends CompilerTest(new TpchQ19AutoPart(Some(CompilerTest.tpch), partBits=CompilerTest.lbits, partAll=true) :: Nil)
