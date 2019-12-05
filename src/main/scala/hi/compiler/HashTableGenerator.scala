@@ -98,16 +98,16 @@ case class HashTableGenerator(elaboration: Elaboration) extends CodeGenerator {
     lazy val findMatchNoOverflow =
       DecAssign(found, Bool(), False) +
       DecAssign(inRec, input.recType, input.currentRec) +
-      ForBlock(i, output.maxCursor,
+      ForBlock(j, output.maxCursor,
         If(
             Not(found) && 
-            output.readMask(i).get && 
-            compareFields(inRec, output.access(i)),
+            output.readMask(j).get && 
+            compareFields(inRec, output.access(j)),
           (found := True) + aggregate) +
-        If(Not(found) && Not(output.readMask(i).get),
+        If(Not(found) && Not(output.readMask(j).get),
           (found := True) +
-          (output.access(i) := inRec) +
-          (if (!op.implicitMask) output.setMask(i, True) else Nop)))
+          (output.access(j) := inRec) +
+          (if (!op.implicitMask) output.setMask(j, True) else Nop)))
 
     if (op.overflow) {
       chunk.base.globalState +
