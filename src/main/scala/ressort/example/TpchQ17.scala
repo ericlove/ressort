@@ -51,36 +51,42 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
     var ptable: MetaOp = part
     var join: MetaOp = litem
 
-    val hash = HashConfig(width = 0, bits = Log2Up(Length('part)))
+    val bits = Log2Up(Length('part))
+    val hash = HashConfig(width = 0, bits = bits, msb = bits - 1)
 
     ptable = ptable
       .filter('p_brand === TpchSchema.BRAND23, 'p_container === TpchSchema.MED_BOX)
       .asIncomplete
-      .rename('p_partkey -> 'p_partkey)
-      .aggregate().copy(groupBy='p_partkey::Nil)
+      .rename('valid -> 'valid, 'p_partkey -> 'p_partkey)
+      .aggregate()
+        .copy(groupBy='p_partkey::Nil, hash = hash)
+        .copy(overflow=false, implicitMask=true)
       .asIncomplete
 
     join = join
       .equiJoin(ptable, 'l_partkey, 'p_partkey)
+        .copy(overflow=false, implicitMask=true)
         .withBuild(false)
         .withGather(false)
-      .asIncomplete
+        .withHash(hash)
       .rename(
         'l_partkey -> 'l_partkey,
         'l_quantity -> Cast('l_quantity, lo.LoDouble()),
         'l_extendedprice -> Cast('l_extendedprice, lo.LoDouble()))
+      .flatten
 
     var ltable: MetaOp = join
     ltable = ltable
       .rename(
+        'valid -> True,
         'l_partkey_table -> 'l_partkey,
         'l_quantity -> 'l_quantity,
         'count -> DoubleConst(1.0))
-      .aggregate(
-        'l_quantity -> PlusOp,
-        'count -> PlusOp).copy(groupBy = 'l_partkey_table :: Nil)
+      .aggregate('l_quantity -> PlusOp, 'count -> PlusOp)
+        .copy(groupBy = 'l_partkey_table :: Nil, overflow=false, implicitMask=true, hash=hash)
       .asIncomplete
       .rename(
+        'valid -> 'valid,
         'l_partkey_table -> 'l_partkey_table,
         'avg -> DoubleConst(0.2) * 'l_quantity / 'count)
 
@@ -88,6 +94,9 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
       .equiJoin(ltable, 'l_partkey, 'l_partkey_table)
         .withBuild(false)
         .withGather(false)
+        .withHash(hash)
+        .copy(overflow=false, implicitMask=true)
+        .asIncomplete
       .filter('l_quantity < 'avg)
       .asIncomplete
 
