@@ -416,7 +416,8 @@ object FlatArray {
         isOutput: Boolean=false)
       extends ArrayView with ParallelView {
     override def toString: String = {
-      s"FlatView[$cursor](${array.buffer.name}, length = ${array.length} ${array.mask.map(_.name)})"
+      val maskStr = readMask(0).getOrElse("")
+      s"FlatView[$cursor](${array.buffer.name}, length = ${array.length} $maskStr"
     }
 
     def globalState = Nop
@@ -424,17 +425,16 @@ object FlatArray {
     def access(n: Expr): LValue = {
       if (array.buffer.immaterial) { array.buffer.name } else { Deref(array.buffer.name).sub(n) }
     }
-    private def maskBuffer: Option[Buffer] = if (array.buffer.implicitMask) Some(array.buffer) else array.mask
     private def mask(n: Expr): Option[LValue] = {
-      maskBuffer.map { a => 
+      array.mask.map { a => 
         val base = if (a.immaterial) a.name else Deref(a.name).sub(n)
-        if (array.buffer.implicitMask)
+        if (a.implicitMask)
           UField(base, 0)
         else
           base
       }
     }
-    private def maskCast(e: Expr): Expr = if (Bool().accepts(maskBuffer.get.recType)) e else Cast(e, Bool())
+    private def maskCast(e: Expr): Expr = if (Bool().accepts(array.mask.get.recType)) e else Cast(e, Bool())
     def readMask(n: Expr): Option[Expr] = mask(n).map(maskCast)
     def readMaskAbsolute(n: Expr): Option[Expr] = readMask(n)
     def setMask(n: Expr, value: Expr): LoAst = mask(n).map(l => (l := maskCast(value))).getOrElse(Nop)

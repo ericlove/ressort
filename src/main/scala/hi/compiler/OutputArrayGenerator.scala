@@ -327,7 +327,7 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
           val zero = arr.buffer.recType.toRecord.fields.head.loType.zero
           arr.buffer.initializer = Some(lo.UField(_, 0) := zero)
           arr.buffer.implicitMask = true
-          arr = arr.withMask(None)
+          arr = arr.withMask(Some(arr.buffer))
         } else {
           val mask = makeMask(arr)
           mask.initializer = Some(_ := lo.False)
