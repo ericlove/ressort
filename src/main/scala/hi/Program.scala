@@ -69,17 +69,9 @@ class Program {
         assigns += Assign(id, concrete(o.id))
       } else {
         metaOp = Some(o.concrete(program))
+        concrete(o.id) = metaOp.get.name.get
         assigns += Assign(id, metaOp.get.name.get)
       }
     }
-
-    /**
-    def apply(e: Expr): Operator = {
-      metaOp match {
-        case Some(mop) if (mop.name != Some(this)) => mop.asOperator()(e)
-        case _ => Eval(IdOp(id), e)
-      }
-    }
-    **/
   }
 }
