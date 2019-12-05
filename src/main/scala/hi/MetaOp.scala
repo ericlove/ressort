@@ -471,6 +471,7 @@ case class EquiJoin(
     rightRenamed: Option[MetaOp]=None,
     overflow: Boolean=true,
     implicitMask: Boolean=false,
+    build: Boolean=true,
     config: EquiJoin.Config=EquiJoin.Config(),
     isComplete: Boolean=true,
     name: Option[ProgSym]=None,
@@ -503,9 +504,11 @@ case class EquiJoin(
 
   def withRightRenamed(rightRenamed: Option[MetaOp]): EquiJoin = copy(rightRenamed = rightRenamed)
 
+  def withBuild(build: Boolean): EquiJoin = copy(build = build)
+
   override def completes: Boolean = true
 
-  def build(right: ProgSym)(implicit p: Program): Operator = {
+  private def buildTable(right: ProgSym)(implicit p: Program): Operator = {
     def rec(in: Operator): Operator = if (config.gather) {
       Let(
         List(
@@ -561,7 +564,10 @@ case class EquiJoin(
     right := this.right
     left := this.left
     val newLeft = left.metaOp.get
-    table := build(right)
+    if (build)
+      table := buildTable(right)
+    else
+      table := right
     if (config.compactTable && !config.partition)
       table := Compact(table, hist=Some(Offsets(table)))
     table := Block(table, nonFusable=true)
@@ -586,6 +592,9 @@ case class EquiJoin(
     }
     if (config.gather.asInstanceOf[FixedParam[Boolean]].fixed) {
       val numLeft = left.fields.size
+      println(s"Join left fields ${left.fields}")
+      println(s"Join right fields ${right.fields}")
+      println()
       Project(
         base.projFields(left.fields.filter(_ != lkey).toSeq:_*),
         Gather(
@@ -793,6 +802,7 @@ case class Aggregate(
     in: MetaOp,
     aggregates: Seq[(Id, CommutativeOp)],
     groupBy: Seq[Id]=Nil,
+    hash: HashConfig=HashConfig(),
     name: Option[ProgSym]=None,
     isComplete: Boolean=true,
     id: MetaOpId=new MetaOpId())
@@ -831,7 +841,9 @@ case class Aggregate(
 
     agg := HashTable(
       in,
-      aggregates.map(a => NFieldName(a._1) -> a._2).toList)
+      hash = Some(hash(in.projFields(groupBy:_*))),
+      buckets = Some(Pow2(hash.bits)),
+      aggregates = aggregates.map(a => NFieldName(a._1) -> a._2).toList)
     if (isComplete) {
       val off = p.fresh("off")
       off := Offsets(agg)
