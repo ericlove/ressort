@@ -115,85 +115,6 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
     in = meta.allOps.head)
   }
 
-  /** In the default query plan for TPC-H Q17, we pre-compute the correlated aggregation
-    * sub-query for each `l_partkey` in `lineitem`.
-    */
-  val oldHiRes: Operator = {
-    Let(
-      List(
-        'lineitem := 'lineitem,
-        'part := 'part,
-        'htbl := 
-          HashTable(
-            'lineitem.project(
-              'l_partkey -> 'l_partkey,
-              'l_quantity -> 'l_quantity,
-              'count -> DoubleConst(1.0)),
-            aggregates = List((NFieldName('l_quantity), PlusOp), (NFieldName('count), PlusOp)),
-            hash = Some(Hash64('lineitem('l_partkey), nbits)),
-            buckets = Some(1 << nbits)
-          ),
-        'litem_htbl := Cat(Shell('lineitem), 'htbl, Shell('part)),
-        'lineitem := Flatten(Uncat('litem_htbl, 0)),
-        'htbl := Uncat('litem_htbl, 1),
-        'part := Flatten(Uncat('litem_htbl, 2)),
-        'hist := Offsets('htbl),
-        'cat := Cat('htbl, Shell('hist)),
-        'htbl := Block(Block(Uncat('cat, 0), nonFusable=true), true),
-        'hist := Flatten(Uncat('cat, 1)),
-        'p2_avg_qty := 'htbl(DoubleConst(0.2) * 'l_quantity / 'count),
-        'l_partkey := 'htbl('l_partkey),
-        'avg_tbl := Compact(Project('l_partkey, 'p2_avg_qty), hist=Some('hist)),
-        'avg_tbl := Block('avg_tbl, true),
-        'cat := Cat(Shell('part), 'avg_tbl),
-        'part := Flatten(Uncat('cat, 0)),
-        'avg_tbl := Uncat('cat, 1),
-        'part_tbl :=
-          HashTable(
-            Let(
-              List(
-                'pcond := 'part(
-                  ('p_brand === TpchSchema.BRAND23) &&
-                  ('p_container === TpchSchema.MED_BOX)),
-                'part := Mask('part, 'pcond)
-              ),
-              'part('p_partkey)
-            ),
-            hash = Some(Hash64('part('p_partkey), nbits)),
-            buckets = Some(1 << nbits)
-          ),
-        'cat := Cat(Shell('part), Shell('lineitem), 'part_tbl),
-        'part := Flatten(Uncat('cat, 0)),
-        'lineitem := Flatten(Uncat('cat, 1)),
-        'part_tbl := Uncat('cat, 2),
-        'ljoin :=
-          HashJoin(
-            left = Shell('lineitem).project(
-              'l_partkey_left -> 'l_partkey,
-              'l_quantity -> 'l_quantity,
-              'l_extendedprice -> 'l_extendedprice),
-            right = 'avg_tbl,
-            hash = Hash64(Shell('lineitem)('l_partkey), nbits),
-            test = Some(('l_partkey_left === 'l_partkey) && ('l_quantity.toLoDouble < 'p2_avg_qty))),
-        'lflat := Flatten(Compact(
-          ('ljoin), hist=Some(Offsets('ljoin)))),
-        'pjoin :=
-          HashJoin(
-            left = Shell('lflat),
-            right = 'part_tbl,
-            hash = Hash64(Shell('lflat)('l_partkey), nbits)),
-        'pflat := 
-            Compact(
-              Block('pjoin, nest=true).project('avg_yearly -> 'l_extendedprice.toLoDouble / 7.0),
-              hist=Some(Offsets('pjoin))
-            ),
-        'avg_yearly := 
-          NestedSumDouble(
-            SumDouble(
-              'pflat('avg_yearly)))
-        ),
-        in = 'avg_yearly(UField(0).toLoFloat))
-  }
 
   override val check = {
     case class LRec(sum_qty: Double, count: Long)
@@ -234,28 +155,6 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
       }
     }
     sum = sum / 7.0
-
-    //val arr = lo.Deref(lo.Deref('result).dot('arr))
-
-    /**
-    case class LJRec(l_partkey: Long, l_quantity: Long, l_extendedprice: Float, p2_avg_qty: Float)
-    val ljoin = ArrayBuffer[LJRec]()
-    for (i <- tpch.l_extendedprice.indices) {
-      val pkey = tpch.l_partkey(i)
-      val qty = tpch.l_quantity(i)
-      val price = tpch.l_extendedprice(i)
-      val lrec = ltbl(pkey)
-      val p2a = 0.2 * lrec.sum_qty / lrec.count
-      if (qty < p2a)
-        ljoin += LJRec(l_partkey = pkey, l_quantity = qty, l_extendedprice = price, p2_avg_qty = p2a.toFloat)
-    }
-    Some(HiResTest.checkArrLong(ljoin.map(_.l_partkey).toArray, arr, Some(x => lo.Field(x, 'l_partkey))))
-    Some(HiResTest.checkArrFloat(ljoin.map(_.p2_avg_qty).toArray, arr, Some(x => lo.Field(x, 'p2_avg_qty))))
-
-    Some(HiResTest.checkArrFloat(pjoin.toArray, arr, Some(x => lo.Field(x, 'avg_yearly))))
-    **/
-
-    //Some(HiResTest.checkArrLong(ptbl.values.flatten.toArray, arr))
 
     val res = lo.Deref(lo.Deref('result).dot('arr)).sub(0)
     Some(HiResTest.checkScalarFloat(sum.toFloat, res))
