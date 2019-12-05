@@ -24,7 +24,6 @@ class OutputArrayGenerator(funcType: Func, config: CompilerConfig) {
       name = MetaArray.tempIds.newId("mask"),
       recType = lo.Bool(),
       length = array.cloneBufferLength,
-      disjoint = array.buffer.disjoint,
       numValid = array.buffer.numValid)
   }
 
