@@ -571,7 +571,7 @@ case class EquiJoin(
     if (config.compactTable && !config.partition)
       table := Compact(table, hist=Some(Offsets(table)))
     table := Block(table, nonFusable=true)
-    if (config.blockHash) {
+    if (config.blockHash && build) {
       left := Cat(left, table)
       table := Uncat(left, 1)
       left := Uncat(left, 0)
@@ -805,6 +805,8 @@ case class Aggregate(
     hash: HashConfig=HashConfig(),
     name: Option[ProgSym]=None,
     isComplete: Boolean=true,
+    overflow: Boolean=true,
+    implicitMask: Boolean=false,
     id: MetaOpId=new MetaOpId())
   extends MetaOp with NeedsCompletion {
 
@@ -812,7 +814,10 @@ case class Aggregate(
 
   def withInputs(inputs: Seq[MetaOp]): Aggregate = copy(in = inputs(0))
 
-  lazy val fields = aggregates.map(_._1)
+  lazy val fields = {
+    val aggFields = aggregates.map(_._1)
+    aggFields ++ groupBy.filter(!aggFields.contains(_))
+  }
 
   override lazy val usedFields = fields ++ groupBy
 
@@ -820,7 +825,8 @@ case class Aggregate(
   def asIncomplete: Aggregate = copy(isComplete = false)
 
   override def completes: Boolean = true
-
+  
+  def withHash(hash: HashConfig): Aggregate = copy(hash = hash)
 
   def withAggregates(aggregates: (Id, CommutativeOp)*): Aggregate = {
     copy(aggregates = aggregates)
@@ -843,8 +849,10 @@ case class Aggregate(
       in,
       hash = Some(hash(in.projFields(groupBy:_*))),
       buckets = Some(Pow2(hash.bits)),
+      overflow = overflow,
+      implicitMask = implicitMask,
       aggregates = aggregates.map(a => NFieldName(a._1) -> a._2).toList)
-    if (isComplete) {
+    if (isComplete && overflow) {
       val off = p.fresh("off")
       off := Offsets(agg)
       agg := Compact(agg, hist=Some(off))
