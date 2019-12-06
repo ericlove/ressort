@@ -51,10 +51,12 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
     var ptable: MetaOp = part
     var join: MetaOp = litem
 
-    val bits = Log2Up(Length('part))
+    val bits = Const(10) //Log2Up(Length('part))
     val hash = HashConfig(width = 0, bits = bits, msb = bits - 1)
+    val threads = 64
 
     ptable = ptable
+      .shell
       .filter('p_brand === TpchSchema.BRAND23, 'p_container === TpchSchema.MED_BOX)
       .asIncomplete
       .rename('valid -> 'valid, 'p_partkey -> 'p_partkey)
@@ -64,16 +66,20 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
       .asIncomplete
 
     join = join
+      .splitPar(threads)
+      .shell
       .equiJoin(ptable, 'l_partkey, 'p_partkey)
         .copy(overflow=false, implicitMask=true)
         .withBuild(false)
         .withGather(false)
         .withHash(hash)
+      .flatten
+      .flatten
+      .splitPar(threads)
       .rename(
         'l_partkey -> 'l_partkey,
         'l_quantity -> Cast('l_quantity, lo.LoDouble()),
         'l_extendedprice -> Cast('l_extendedprice, lo.LoDouble()))
-      .flatten
 
     var ltable: MetaOp = join
     ltable = ltable
@@ -91,12 +97,12 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
         'avg -> DoubleConst(0.2) * 'l_quantity / 'count)
 
     join = join
+      .shell
       .equiJoin(ltable, 'l_partkey, 'l_partkey_table)
         .withBuild(false)
         .withGather(false)
         .withHash(hash)
         .copy(overflow=false, implicitMask=true)
-        .asIncomplete
       .filter('l_quantity < 'avg)
       .asIncomplete
 
@@ -104,7 +110,10 @@ class TpchQ17(tpch: TpchSchema.Generator, extraBits: Int=0, weave: Int=0) extend
       .aggregate('l_extendedprice -> PlusOp)
       .rename('avg_yearly -> UField(0) / DoubleConst(7.0))
 
-    join.nestedSumDouble('avg_yearly).cast(UField(0), lo.LoFloat())
+    join
+      .nestedSumDouble('avg_yearly)
+      .nestedSumDouble(UField(0))
+      .cast(UField(0), lo.LoFloat())
   }
 
   val hiRes: Operator = {
