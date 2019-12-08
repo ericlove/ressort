@@ -364,7 +364,7 @@ class TpchQ19AutoPart(
         .withGather(!earlyMatTable)
         .withBlockBuild(blockBuild)
         .withBlockHash(false)
-        .withPartition(partition=buildPartitioned, parallelPart=true)
+        .withPartition(partition=buildPartitioned, parallelPart=(threads>1 && !twoSided))
         .withRightRenamed(rightRenamed = (if (blockBuild && buildPartitioned) Some(values) else None))
         .asIncomplete
 
