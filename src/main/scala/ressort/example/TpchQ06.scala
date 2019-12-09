@@ -3,7 +3,7 @@ package ressort.example
 import ressort.hi._
 import ressort.lo
 
-class TpchQ06(threads: Int, crack: Boolean, collect: Boolean=false, tpch: Option[TpchSchema.Generator]=None, pad: Int=4096, minDate: Int=TpchQ06.constants.minDate) extends HiResTest {
+class TpchQ06(threads: Int, crack: Boolean, collect: Boolean=false, tpch: Option[TpchSchema.Generator]=None, pad: Int=0, minDate: Int=TpchQ06.constants.minDate) extends HiResTest {
   val crackStr = if (crack) "_crack" else ""
   val mdStr = s"_${minDate}minDate"
   val name = s"q06_t${threads}${crackStr}_${pad}pad$mdStr"
@@ -59,7 +59,7 @@ object TpchQ06 {
       lo.LoFloat())
   }
 
-  def query(threads: Int=1, crack: Boolean=false, collect: Boolean=false, pad: Int=4096, minDate: Int=constants.minDate): Operator = {
+  def query(threads: Int=1, crack: Boolean=false, collect: Boolean=false, pad: Int=0, minDate: Int=constants.minDate): Operator = {
     val litem = Concrete('lineitem, TpchSchema.lineitem.s.fields.map(_.name.get.name).map(Id))
 
     var meta: MetaOp = litem
@@ -71,6 +71,7 @@ object TpchQ06 {
         'l_discount > constants.minDiscount && 'l_discount < constants.maxDiscount,
         'l_quantity < constants.maxQuantity)
           .withCracked(crack).withCollect(collect)
+          .asIncomplete
       .rename('revenue ->  Cast('l_extendedprice, lo.LoDouble()) * Cast('l_discount, lo.LoDouble()))
       .aggregate(('revenue, PlusOp))
       .nestedSumDouble('revenue, mute = threads < 2)
