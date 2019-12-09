@@ -5,8 +5,9 @@ import ressort.lo
 
 class TpchQ06(threads: Int, crack: Boolean, collect: Boolean=false, tpch: Option[TpchSchema.Generator]=None, pad: Int=0, minDate: Int=TpchQ06.constants.minDate) extends HiResTest {
   val crackStr = if (crack) "_crack" else ""
+  val collStr = if (collect) "_coll" else ""
   val mdStr = s"_${minDate}minDate"
-  val name = s"q06_t${threads}${crackStr}_${pad}pad$mdStr"
+  val name = s"q06_t${threads}${crackStr}${collStr}_${pad}pad$mdStr"
 
   val input = tpch.map(_.allocate).getOrElse(lo.Nop)
 
